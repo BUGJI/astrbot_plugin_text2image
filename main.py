@@ -67,7 +67,7 @@ def render_text(
 # ===============================
 # 插件主体
 # ===============================
-@register("texttool", "BUGJI", "文本转图片工具", "0.2.0")
+@register("texttool", "BUGJI", "文本转图片", "0.1.0", "https://github.com/BUGJI/astrbot_plugin_text2image")
 class TextTool(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
