@@ -19,16 +19,17 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 # ===============================
-# 渲染函数（原样保留）
+# 渲染函数
 # ===============================
+
 def render_text(
     text,
     font_path,
-    font_size=48,
-    canvas_height=128,
+    font_size,
+    canvas_height,
     canvas_width=None,
     dpi=72,
-    center_mode="visual",
+    center_mode="visual",  # "visual" or "geometry"
     x_offset_ratio=0.5,
     y_offset_ratio=0.5,
     padding=0,
@@ -38,30 +39,66 @@ def render_text(
 ):
     font = ImageFont.truetype(font_path, font_size)
 
+    # ---- measure text ----
     dummy = Image.new("RGBA", (10, 10))
     ddraw = ImageDraw.Draw(dummy)
     bbox = ddraw.textbbox((0, 0), text, font=font)
 
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
-    ascent, _ = font.getmetrics()
 
+    ascent, descent = font.getmetrics()
+
+    # ---- final canvas size ----
     if canvas_width is None:
         canvas_width = text_w + padding * 2
 
+    # ---- safety margin (关键) ----
+    # 足够大，防止 glyph hinting 越界
     safety = font_size * 2
-    safe_img = Image.new("RGBA", (canvas_width + safety * 2, canvas_height + safety * 2), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(safe_img)
 
-    x = int((canvas_width - text_w) * x_offset_ratio) + safety
-    baseline = int(canvas_height * y_offset_ratio)
-    y = baseline - ascent + safety
+    safe_w = canvas_width + safety * 2
+    safe_h = canvas_height + safety * 2
 
-    draw.text((x, y), text, font=font, fill=text_color)
+    safe_img = Image.new("RGBA", (safe_w, safe_h), (0, 0, 0, 0))
+    safe_draw = ImageDraw.Draw(safe_img)
 
-    final = Image.new("RGBA", (canvas_width, canvas_height), bg_color)
-    final.paste(safe_img.crop((safety, safety, safety + canvas_width, safety + canvas_height)), (0, 0))
-    final.save(output_path)
+    # ---- compute position in final canvas ----
+    x_space = canvas_width - text_w
+    x_final = int(x_space * x_offset_ratio)
+
+    if center_mode == "geometry":
+        y_space = canvas_height - text_h
+        y_final = int(y_space * y_offset_ratio) - bbox[1]
+    elif center_mode == "visual":
+        baseline = int(canvas_height * y_offset_ratio)
+        y_final = baseline - ascent
+    else:
+        raise ValueError("center_mode must be 'visual' or 'geometry'")
+
+    # ---- shift into safe canvas ----
+    x_safe = x_final + safety
+    y_safe = y_final + safety
+
+    # ---- draw on safe canvas ----
+    safe_draw.text((x_safe, y_safe), text, font=font, fill=text_color)
+
+    # ---- crop back to final canvas ----
+    final_img = Image.new("RGBA", (canvas_width, canvas_height), bg_color)
+    final_img.info["dpi"] = (dpi, dpi)
+
+    final_img.paste(
+        safe_img.crop((
+            safety,
+            safety,
+            safety + canvas_width,
+            safety + canvas_height
+        )),
+        (0, 0)
+    )
+
+    final_img.save(output_path)
+
 
 
 # ===============================
@@ -69,6 +106,21 @@ def render_text(
 # ===============================
 @register("texttool", "BUGJI", "文本转图片", "0.1.0", "https://github.com/BUGJI/astrbot_plugin_text2image")
 class TextTool(Star):
+
+    ALLOWED_PARAMS = {
+        "font_size",
+        "canvas_height",
+        "canvas_width",
+        "dpi",
+        "center_mode",
+        "x_offset_ratio",
+        "y_offset_ratio",
+        "padding",
+        "text_color",
+        "bg_color",
+    }
+
+    
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.config = config
@@ -82,7 +134,7 @@ class TextTool(Star):
         self.max_task = int(self.config.limit.get("max_task", 20))
         self.max_chars_per_task = int(self.config.limit.get("max_chars_per_task", 20000))
         self.max_images_per_task = int(self.config.limit.get("max_images_per_task", 1000))
-
+        
         self.queue: asyncio.Queue = asyncio.Queue()
 
     async def initialize(self):
@@ -209,7 +261,7 @@ class TextTool(Star):
 
         images = []
         for i, text in enumerate(tokens):
-            out = folder / f"{folder.name}_texttool_{i:03d}.png"
+            out = folder / f"{folder.name}_texttool_{i:08d}.png"
             render_text(
                 text=text,
                 font_path=font_path,
@@ -234,7 +286,33 @@ class TextTool(Star):
     # ===============================
     # 工具函数
     # ===============================
-    def _parse_params(self, text: str) -> (Dict, str):
+    
+    def _parse_color(self, value: str):
+        """
+        支持:
+        #RRGGBB
+        #RRGGBBAA
+        返回 RGBA tuple
+        """
+        v = value.lstrip("#")
+
+        if len(v) == 6:
+            r, g, b = v[0:2], v[2:4], v[4:6]
+            a = "FF"
+        elif len(v) == 8:
+            r, g, b, a = v[0:2], v[2:4], v[4:6], v[6:8]
+        else:
+            raise ValueError(f"非法颜色格式: {value}")
+
+        return (
+            int(r, 16),
+            int(g, 16),
+            int(b, 16),
+            int(a, 16),
+        )
+
+    
+    def _parse_params(self, text: str):
         params = {}
         parts = text.split()
         content_parts = []
@@ -242,11 +320,21 @@ class TextTool(Star):
         for p in parts:
             if ":" in p:
                 k, v = p.split(":", 1)
-                params[k] = self._cast(v)
+
+                # 非法参数直接忽略（或你也可以 raise）
+                if k not in self.ALLOWED_PARAMS and k != "mode" and k != "font":
+                    continue
+
+                # 颜色参数
+                if k in ("text_color", "bg_color"):
+                    params[k] = self._parse_color(v)
+                else:
+                    params[k] = self._cast(v)
             else:
                 content_parts.append(p)
 
         return params, " ".join(content_parts)
+
 
     def _cast(self, v: str):
         for t in (int, float):
