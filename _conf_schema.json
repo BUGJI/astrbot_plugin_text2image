@@ -1,0 +1,34 @@
+{
+  "token": {
+    "description": "Bot Token",
+    "type": "string"
+  },
+  "limit": {
+    "description": "对会话的限制",
+    "type": "object",
+    "hint": "限制性能防止爆炸",
+    "items": {
+      "max_images_per_task": {
+        "description": "单次任务最大图片数",
+        "type": "int",
+        "hint": "每个任务最多生成的图片数量",
+        "default": 1000
+      },
+      "max_chars_per_task": {
+        "description": "单次任务最大字符数",
+        "type": "int",
+        "hint": "每个任务最多输入的字符数量",
+        "default": 20000
+      },
+      "max_task": {
+        "description": "队列最大任务数",
+        "type": "int",
+        "hint": "队列中最多允许的任务数量",
+        "default": 20
+      }
+    }
+  }
+}
+
+
+
