@@ -23,7 +23,8 @@
       "max_task": {
         "description": "队列最大任务数",
         "type": "int",
-        "hint": "队列中最多允许的任务数量",
+        "hint": "队列中最多允许的任务数量，不建议设置太高",
+        "obvious_hint": true,
         "default": 20
       }
     }
