@@ -140,11 +140,11 @@ class TextTool(Star):
 
         # ⭐ 多图：进队列
         if self.queue.qsize() >= self.max_task:
-            yield event.plain_result("任务队列已满")
+            yield event.plain_result("任务队列已满，请稍后再试")
             return
 
         await self.queue.put((event, params, tokens))
-        yield event.plain_result("已加入队列")
+        yield event.plain_result(f"已加入任务队列，目前队列长度: {self.queue.qsize()/self.max_task}\n预计时间：小于1分钟")
 
     async def send_chain(event, chain):
         await event.send(event.chain_result(chain))
