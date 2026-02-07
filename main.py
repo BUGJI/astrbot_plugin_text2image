@@ -22,84 +22,116 @@ from PIL import Image, ImageDraw, ImageFont
 # 渲染函数
 # ===============================
 
+def draw_text_with_fallback(draw, pos, text, main_font, fallback_font, fill):
+    """
+    逐字符渲染，主字体不能显示则使用 fallback
+    draw: ImageDraw.Draw 对象
+    pos: (x, y) 起点
+    text: 待渲染文本
+    main_font: 主字体 ImageFont
+    fallback_font: fallback 字体 ImageFont
+    fill: RGBA 颜色
+    """
+    x, y = pos
+    for ch in text:
+        f = main_font
+        try:
+            # 使用 textbbox 测量字符宽度
+            bbox = draw.textbbox((0, 0), ch, font=main_font)
+            if bbox[2] - bbox[0] == 0:
+                f = fallback_font
+        except Exception:
+            f = fallback_font
+
+        draw.text((x, y), ch, font=f, fill=fill)
+        # 计算字符宽度，确保中文/emoji 也准确
+        x += draw.textlength(ch, font=f)
+
 def render_text(
     text,
     font_path,
-    font_size,
-    canvas_height,
+    default_font_path,  # fallback 字体路径
+    font_size=48,
+    canvas_height=128,
     canvas_width=None,
     dpi=72,
-    center_mode="visual",  # "visual" or "geometry"
+    center_mode="visual",
     x_offset_ratio=0.5,
     y_offset_ratio=0.5,
     padding=0,
     text_color=(0, 0, 0, 255),
     bg_color=(0, 0, 0, 0),
-    output_path="out.png"
+    output_path="out.png",
+    fallback_font_path=None,
 ):
-    font = ImageFont.truetype(font_path, font_size)
+    """
+    渲染文本为图片，支持 fallback 字体、多语言和 emoji
+    """
 
-    # ---- measure text ----
-    dummy = Image.new("RGBA", (10, 10))
-    ddraw = ImageDraw.Draw(dummy)
-    bbox = ddraw.textbbox((0, 0), text, font=font)
+    def load_font(path):
+        try:
+            return ImageFont.truetype(str(path), font_size)
+        except Exception as e:
+            raise ValueError(f"字体加载失败: {path}, {e}")
 
-    text_w = bbox[2] - bbox[0]
-    text_h = bbox[3] - bbox[1]
+    # 主字体
+    try:
+        main_font = load_font(font_path)
+    except Exception:
+        if fallback_font_path:
+            main_font = load_font(fallback_font_path)
+        else:
+            raise
 
-    ascent, descent = font.getmetrics()
+    # fallback 字体
+    fallback_font = load_font(fallback_font_path) if fallback_font_path else main_font
 
-    # ---- final canvas size ----
+    # 计算文本宽度
+    def measure_text_width(text):
+        tmp_img = Image.new("RGBA", (1, 1))
+        draw = ImageDraw.Draw(tmp_img)
+        width = 0
+        for ch in text:
+            f = main_font
+            try:
+                bbox = draw.textbbox((0, 0), ch, font=main_font)
+                if bbox[2] - bbox[0] == 0:
+                    f = fallback_font
+            except Exception:
+                f = fallback_font
+            width += draw.textlength(ch, font=f)
+        return int(width)
+
+    text_width = measure_text_width(text)
+    ascent, descent = main_font.getmetrics()
+    text_height = ascent + descent
+
     if canvas_width is None:
-        canvas_width = text_w + padding * 2
+        canvas_width = text_width + padding * 2
 
-    # ---- safety margin (关键) ----
-    # 足够大，防止 glyph hinting 越界
+    # 安全边界，防止超出
     safety = font_size * 2
+    safe_img = Image.new("RGBA", (canvas_width + safety*2, canvas_height + safety*2), (0,0,0,0))
+    draw = ImageDraw.Draw(safe_img)
 
-    safe_w = canvas_width + safety * 2
-    safe_h = canvas_height + safety * 2
-
-    safe_img = Image.new("RGBA", (safe_w, safe_h), (0, 0, 0, 0))
-    safe_draw = ImageDraw.Draw(safe_img)
-
-    # ---- compute position in final canvas ----
-    x_space = canvas_width - text_w
-    x_final = int(x_space * x_offset_ratio)
-
+    # 定位
+    x_space = canvas_width - text_width
+    x = int(x_space * x_offset_ratio) + safety
     if center_mode == "geometry":
-        y_space = canvas_height - text_h
-        y_final = int(y_space * y_offset_ratio) - bbox[1]
-    elif center_mode == "visual":
-        baseline = int(canvas_height * y_offset_ratio)
-        y_final = baseline - ascent
+        y_space = canvas_height - text_height
+        y = int(y_space * y_offset_ratio) + safety
     else:
-        raise ValueError("center_mode must be 'visual' or 'geometry'")
+        baseline = int(canvas_height * y_offset_ratio)
+        y = baseline - ascent + safety
 
-    # ---- shift into safe canvas ----
-    x_safe = x_final + safety
-    y_safe = y_final + safety
+    # 渲染
+    draw_text_with_fallback(draw, (x, y), text, main_font, fallback_font, text_color)
 
-    # ---- draw on safe canvas ----
-    safe_draw.text((x_safe, y_safe), text, font=font, fill=text_color)
-
-    # ---- crop back to final canvas ----
+    # 裁剪并输出
     final_img = Image.new("RGBA", (canvas_width, canvas_height), bg_color)
     final_img.info["dpi"] = (dpi, dpi)
-
-    final_img.paste(
-        safe_img.crop((
-            safety,
-            safety,
-            safety + canvas_width,
-            safety + canvas_height
-        )),
-        (0, 0)
-    )
-
+    final_img.paste(safe_img.crop((safety, safety, safety + canvas_width, safety + canvas_height)), (0,0))
     final_img.save(output_path)
-
-
 
 # ===============================
 # 插件主体
@@ -223,6 +255,7 @@ class TextTool(Star):
 
         font_name = params.pop("font", "default")
         font_path = self._resolve_font(font_name)
+        default_font_path = self._resolve_font("default") if font_name != "default" else font_path
 
         images = []
         for i, text in enumerate(tokens):
@@ -230,6 +263,7 @@ class TextTool(Star):
             render_text(
                 text=text,
                 font_path=font_path,
+                default_font_path=default_font_path,  # fallback 字体
                 output_path=str(out),
                 **params
             )
@@ -356,10 +390,44 @@ class TextTool(Star):
         return [text.strip()]
 
     def _resolve_font(self, name: str) -> str:
-        fonts = json.loads(self.fonts_path.read_text(encoding="utf-8"))
-        if name not in fonts:
-            raise ValueError(f"字体不存在: {name}")
-        return str((self.data_path / fonts[name]).resolve())
+        """
+        返回可用字体路径字符串。
+        1. fonts.json 中的中文或空格路径也能加载
+        2. 找不到或加载失败则使用 default
+        """
+        try:
+            fonts = json.loads(self.fonts_path.read_text(encoding="utf-8"))
+        except Exception:
+            fonts = {}
+
+        # 尝试指定字体
+        font_rel_path = fonts.get(name)
+        if font_rel_path:
+            font_path = self.data_path / font_rel_path
+            if self._can_load_font(font_path):
+                return str(font_path)
+
+        # 尝试 default 字体
+        default_rel_path = fonts.get("default")
+        if default_rel_path:
+            default_path = self.data_path / default_rel_path
+            if self._can_load_font(default_path):
+                return str(default_path)
+
+        raise ValueError(f"字体 {name} 和默认字体 default 均无法加载，请检查 fonts.json 配置")
+
+    def _can_load_font(self, path: Path) -> bool:
+        """
+        尝试加载字体文件，返回是否成功。
+        兼容中文、空格及 Unicode 路径
+        """
+        if not path.exists():
+            return False
+        try:
+            ImageFont.truetype(str(path), 48)
+            return True
+        except Exception:
+            return False
 
     def _zip(self, folder: Path, zip_path: Path):
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
