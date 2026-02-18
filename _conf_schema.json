@@ -1,7 +1,9 @@
 {
-  "token": {
-    "description": "Bot Token",
-    "type": "string"
+  "default_font": {
+    "description": "默认字体名称",
+    "hint": "默认字体名称，填入在fonts目录下对应的.ttf文件名(不带扩展名)，如AAAA.ttf则填入AAAA",
+    "type": "string",
+    "default": "AAAA"
   },
   "limit": {
     "description": "对会话的限制",
@@ -26,6 +28,12 @@
         "hint": "队列中最多允许的任务数量，不建议设置太高",
         "obvious_hint": true,
         "default": 20
+      },
+      "fonts_per_page": {
+        "description": "每页显示字体数量",
+        "type": "int",
+        "hint": "在字体列表中每页显示的字体数量",
+        "default": 5
       }
     }
   }

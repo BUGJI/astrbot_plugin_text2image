@@ -4,6 +4,19 @@
 
 这个插件使用非常简单，不需要专业知识，只需要会复制粘贴即可
 
+## 🥧 全局帮助
+
+texttool 包含一些基本指令，拼接到后面即可：
+
+| 指令 | 定义 |
+| ---- | ---- |
+| help | 显示基本使用方法 |
+| pm | 显示基本常用参数 |
+| list | 列出可用字体 后面加数字可以翻页 |
+| listall | 一次性列出所有字体 |
+| task | 查看当前排程 |
+| generate | 生成文字内容 |
+
 ## 💡 使用方法
 基础命令格式：
 ```bash
@@ -13,24 +26,29 @@ texttool generate 请输入文本
 - 默认生成**透明底黑字**图片，高度固定，宽度随文字数量自适应
 
 ## 📖 新手教程
-> ⚠️ 新用户建议先阅读本章节，帮助理解核心功能
+
+⚠️ 新用户建议先阅读本章节，帮助理解核心功能
 
 ### 参数使用规则
 在生成命令中，可在 `generate` 后、待生成文本前添加自定义参数，示例：
-```bash
-texttool generate mode:char 请输入文本
-```
+
+`texttool generate mode:char 请输入文本`
+
+> 结果：输出五个文字的图片
 
 #### 多图模式的文件输出规则
 当使用非 `single`（单图）模式时，任务会加入排程，完成后发送压缩包，文件命名规则为：
+
+```bash
+[8位唯一ID]_[时间戳].zip
+[8位唯一ID]_[时间戳]_[8位顺序数字].png
 ```
-[时间戳]_texttool_[8位顺序数字].png
+
+压缩包内的文件示例：
 ```
-示例：
-```
-12345678_texttool_00000000.png
-12345678_texttool_00000001.png
-12345678_texttool_00000002.png
+1a2b3c4d_texttool_00000000.png
+1a2b3c4d_texttool_00000001.png
+1a2b3c4d_texttool_00000002.png
 ```
 ✅ Windows 文件资源管理器可按文件名正常排序
 
@@ -46,22 +64,23 @@ mode 参数支持 5 种生成模式，参数格式为 `mode:值`：
 | token  | 按 `\|` 分隔（精确分隔），需提前处理文本 |
 
 示例：
-```bash
-texttool generate mode:word hello world
-```
+
+`texttool generate mode:word hello world`
+
+> 结果：输出两个词的文件 hello 和 world
 
 ### 字体选择
 可指定程序支持的字体，参数格式为 `font:字体名`：
 
 1. 查看可用字体列表：
    ```bash
-   texttool font_list
+   texttool list
    ```
 2. 使用指定字体生成图片（需管理员提前配置字体文件）：
    ```bash
    texttool generate mode:word font:Arial hello world
    ```
-   > 字体文件需放置在 `plugin_data/astrbot_plugin_text2image/ttf` 目录，字体别名在上级目录的 `fonts.json` 中定义
+   > 字体文件需放置在 `astrbot_plugin_text2image/ttf` 目录
 
 ## 🚀 进阶教程
 按「常用度」分为三类参数，可组合使用。
@@ -120,6 +139,13 @@ texttool generate mode:word hello world
 - 参数格式：`canvas_width:值`
 - ⚠️ 注意：设置后宽度固定，可能导致文字大小不一致或超出边界
 
+## 🐓 提示
+
+直接使用 `texttool generate` 可以输出帮助文档
+
+使用 `texttool list <页码>` 可以翻页
+
 ## 🙏 致谢
 - ChatGPT：协助编写核心代码
 - 豆包：帮我优化这个排版没救的文档
+- 所有人（网名）：帮我继续能工智人的优化

@@ -1,8 +1,8 @@
 import asyncio
-import json
 import time
 import zipfile
 import shutil
+import hashlib
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any, Union
@@ -11,7 +11,6 @@ from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.message_components import File as CompFile
-import astrbot.api.message_components as Comp
 
 from astrbot.api import AstrBotConfig
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -35,6 +34,25 @@ def draw_text_with_fallback(draw: ImageDraw.Draw, pos: Tuple[int, int], text: st
         draw.text((x, y), ch, font=f, fill=fill)
         x += draw.textlength(ch, font=f)
 
+def _render_batch(
+    tokens: List[str],
+    folder: Path,
+    font_path: Path,
+    default_font_path: Path,
+    params: Dict[str, Any]
+) -> List[Path]:
+    images = []
+    for i, text in enumerate(tokens):
+        out = folder / f"{folder.name}_{i:08d}.png"
+        render_text(
+            text=text,
+            font_path=str(font_path),
+            default_font_path=str(default_font_path),
+            output_path=str(out),
+            **params
+        )
+        images.append(out)
+    return images
 
 def render_text(
     text: str,
@@ -118,7 +136,7 @@ def render_text(
     final_img.save(output_path)
 
 
-@register("texttool", "BUGJI", "文本转图片", "0.1.0", "https://github.com/BUGJI/astrbot_plugin_text2image")
+@register("texttool", "BUGJI", "文本转图片", "0.2.0", "https://github.com/BUGJI/astrbot_plugin_text2image")
 class TextTool(Star):
 
     ALLOWED_PARAMS = {
@@ -132,6 +150,8 @@ class TextTool(Star):
         "padding",
         "text_color",
         "bg_color",
+        "mode",
+        "font",
     }
 
     
@@ -150,11 +170,12 @@ class TextTool(Star):
         self.max_task = int(self.config.limit.get("max_task", 20))
         self.max_chars_per_task = int(self.config.limit.get("max_chars_per_task", 20000))
         self.max_images_per_task = int(self.config.limit.get("max_images_per_task", 1000))
+        self.fonts_per_page = int(self.config.limit.get("fonts_per_page", 5))
         
-        self.fonts_per_page = 5
+        self.default_font = self.config.get("default_font", "AAAA")
         
-        self.default_font_name = "AAAA"
-        self.default_font_path = self.fonts_dir / "AAAA.ttf"
+        self.default_font_name = self.default_font
+        self.default_font_path = self.fonts_dir / f"{self.default_font}.ttf"
         
         self.queue: asyncio.Queue = asyncio.Queue()
 
@@ -163,30 +184,76 @@ class TextTool(Star):
         self.cache_path.mkdir(parents=True, exist_ok=True)
         
         self.fonts_dir.mkdir(exist_ok=True)
-        
-        asyncio.create_task(self._worker())
+        worker_count = min(4, self.max_task)
+
+        for _ in range(worker_count):
+            asyncio.create_task(self._worker())
+            
+    # def _clean_old_cache(self):
+    #     now = time.time()
+    #     for p in self.cache_path.iterdir():
+    #         if p.is_dir():
+    #             if now - p.stat().st_mtime > 3600:
+    #                 shutil.rmtree(p, ignore_errors=True)
+
+
 
     @filter.command_group("texttool")
     def texttool(self):
         pass
+    
+    @texttool.command("help")
+    async def help(self, event: AstrMessageEvent):
+        yield event.plain_result("texttool 帮助信息:\n"
+                                 "texttool generate [参数:值] 文本内容 - 生成文本图片\n"
+                                 "texttool pm - 基本参数帮助\n"
+                                 "texttool listall - 查看所有可用字体\n"
+                                 "texttool list [页码] - 分页查看可用字体列表\n"
+                                 "texttool task - 查看当前任务队列状态")
 
-    @texttool.command("font_list")
-    async def font_list(self, event: AstrMessageEvent):
+    @texttool.command("pm")
+    async def param_help(self, event: AstrMessageEvent):
+        msg_lines = [
+            "文本转图片工具参数说明:",
+            "",
+            "在待输入前部分添加参数，格式为 参数名:值，多个参数用空格分隔，参数必须放在文本内容前面",
+            " 例子：",
+            " texttool generate font:宋体 mode:single text_color:#FF0000FF 你好世界",
+            "",
+            "font - 字体名称，请使用texttool list查看可用字体，不填使用默认字体",
+            "mode - single（默认）整行渲染，char按字渲染，word分词渲染(空格分隔)，line分行渲染，token分块渲染（用|分隔）",
+            "text_color - 文字颜色，格式#RRGGBB或#RRGGBBAA，默认#000000FF",
+            "bg_color - 背景颜色，格式同上，默认透明",
+            "font_size - 字体大小，整数，默认48",
+            "center_mode - 文本对齐模式， geometry（按照文字真实体积缩放）, visual(默认)",
+            "x_offset_ratio - 中心水平偏移比例，0-1之间，默认0.5",
+            "y_offset_ratio - 中心垂直偏移比例，0-1之间，默认0.5",
+            "padding - 画布内边距，整数，默认0",
+            "",
+            "更多自定义参数请查看：",
+            "https://github.com/BUGJI/astrbot_plugin_text2image/blob/master/README.md#-进阶教程"
+            
+        ]
+        yield event.plain_result("\n".join(msg_lines))
+
+    @texttool.command("listall")
+    async def listall(self, event: AstrMessageEvent):
+        
         fonts = self._scan_fonts()
         if not fonts:
             yield event.plain_result("未找到任何字体文件，请在插件目录的 fonts 文件夹中添加字体文件\n默认字体为 AAAA.ttf")
             return
         
         msg_lines = ["可用字体列表 (完整):"]
-        for font_name, font_path in sorted(fonts.items()):
+        for font_name, font_path in sorted(fonts.items(), key=lambda x: x[0]):
             if font_name == self.default_font_name:
                 msg_lines.append(f"- {font_name} (默认字体)")
             else:
                 msg_lines.append(f"- {font_name} ({font_path.name})")
         
         msg_lines.append("\n使用方式: texttool generate font:字体名称 文本内容")
-        msg_lines.append("分页查看: texttool list [页码]")
-        msg_lines.append(f"如果没有找到指定字体，将使用默认字体 {self.default_font_name}")
+        msg_lines.append("\n分页查看: texttool list [页码]")
+        msg_lines.append(f"\n如果没有找到指定字体，将使用默认字体 {self.default_font_name}")
         yield event.plain_result("\n".join(msg_lines))
 
     @texttool.command("list")
@@ -316,14 +383,6 @@ class TextTool(Star):
             yield event.plain_result(f"生成的图片数量过多，最多支持 {self.max_images_per_task} 张")
             return
 
-        font_name = params.get("font", self.default_font_name)
-        
-        try:
-            font_path = self._resolve_font(font_name)
-        except ValueError:
-            font_path = self.default_font_path
-            logger.info(f"字体 '{font_name}' 不存在，使用默认字体 {self.default_font_name}")
-
         if len(tokens) == 1:
             await self._process_and_send(event, params, tokens)
             return
@@ -343,8 +402,9 @@ class TextTool(Star):
                     await self._process_and_send(event, params, tokens)
                 except Exception as e:
                     error_msg = f"生成失败：{str(e)}"
-                    await event.send(error_msg)
+                    await event.send(event.plain_result(error_msg))
                     logger.exception("texttool worker error")
+
                 finally:
                     self.queue.task_done()
             except Exception as e:
@@ -353,34 +413,52 @@ class TextTool(Star):
 
     async def _process_and_send(self, event: AstrMessageEvent, params: Dict[str, Any], 
                                tokens: List[str]) -> None:
-        uid = event.get_sender_id()
-        ts = int(time.time())
-        folder = self.cache_path / f"{uid}_{ts}"
+        uid_raw = str(event.get_sender_id())
+        uid_safe = hashlib.sha256(uid_raw.encode()).hexdigest()[:8]
+        ts = int(time.time() * 1000)
+        folder = self.cache_path / f"{uid_safe}_{ts}"
+        
         folder.mkdir(parents=True, exist_ok=True)
 
-        font_name = params.pop("font", self.default_font_name)
+        local_params = dict(params)
+        font_name = local_params.pop("font", self.default_font_name)
+        local_params.pop("mode", None)  # 双保险
+        
         try:
             font_path = self._resolve_font(font_name)
         except ValueError:
             font_path = self.default_font_path
-        
-        default_font_path = self.default_font_path
+            
+        images = await asyncio.to_thread(
+            _render_batch,
+            tokens,
+            folder,
+            font_path,
+            self.default_font_path,
+            local_params
+        )
 
-        images = []
-        for i, text in enumerate(tokens):
-            out = folder / f"{folder.name}_{i:03d}.png"
-            try:
-                render_text(
-                    text=text,
-                    font_path=str(font_path),
-                    default_font_path=str(default_font_path),
-                    output_path=str(out),
-                    **params
-                )
-                images.append(out)
-            except Exception as e:
-                logger.error(f"渲染文本失败: {e}")
-                raise RuntimeError(f"渲染文本失败: {str(e)}")
+
+
+        # images = []
+        # for i, text in enumerate(tokens):
+        #     out = folder / f"{folder.name}_{i:03d}.png"
+        #     try:
+        #         await asyncio.to_thread(
+        #             render_text,
+        #             text=text,
+        #             font_path=str(font_path),
+        #             default_font_path=str(default_font_path),
+        #             output_path=str(out),
+        #             **params
+        #         )
+
+        #         images.append(out)
+        #     except Exception as e:
+        #         logger.error(f"渲染文本失败: {e}")
+        #         raise RuntimeError(f"渲染文本失败: {str(e)}")
+
+        zip_path: Optional[Path] = None
 
         try:
             if len(images) == 1:
@@ -393,8 +471,9 @@ class TextTool(Star):
                 await event.send(event.chain_result(chain))
         finally:
             shutil.rmtree(folder, ignore_errors=True)
-            if len(images) > 1 and zip_path.exists():
+            if zip_path and zip_path.exists():
                 zip_path.unlink(missing_ok=True)
+
 
     def _scan_fonts(self) -> Dict[str, Path]:
         fonts = {}
@@ -402,7 +481,7 @@ class TextTool(Star):
         if not self.fonts_dir.exists():
             return fonts
         
-        font_extensions = {'.ttf', '.otf', '.ttc', '.woff', '.woff2'}
+        font_extensions = {'.ttf', '.otf', '.ttc'}
         
         for font_file in self.fonts_dir.iterdir():
             if font_file.is_file() and font_file.suffix.lower() in font_extensions:
@@ -464,48 +543,42 @@ class TextTool(Star):
     
     def _parse_params(self, text: str) -> Tuple[Dict[str, Any], str]:
         params = {"font": self.default_font_name}
-        
+
         if not text:
             return params, ""
-        
+
         words = text.split()
-        
         i = 0
+
         while i < len(words):
-            word = words[i]
-            
-            if ":" in word:
-                parts = word.split(":", 1)
-                key = parts[0]
-                value = parts[1]
-                
-                if key in self.ALLOWED_PARAMS or key in ("mode", "font"):
-                    if not value and i + 1 < len(words):
-                        next_word = words[i + 1]
-                        if ":" not in next_word:
-                            value = next_word
-                            i += 1
-                    
-                    if key in ("text_color", "bg_color"):
-                        try:
-                            params[key] = self._parse_color(value)
-                        except ValueError:
-                            pass
-                    else:
-                        params[key] = self._cast(value)
-                else:
-                    break
-            else:
+            current = words[i]
+
+            if ":" not in current:
                 break
-            
+
+            key, value = current.split(":", 1)
+
+            if key not in self.ALLOWED_PARAMS:
+                break
+
+            if not value and i + 1 < len(words):
+                if ":" not in words[i + 1]:
+                    value = words[i + 1]
+                    i += 1
+
+            if key in ("text_color", "bg_color"):
+                try:
+                    params[key] = self._parse_color(value)
+                except ValueError:
+                    pass
+            else:
+                params[key] = self._cast(value)
+
             i += 1
-        
-        if i < len(words):
-            content = " ".join(words[i:])
-        else:
-            content = ""
-        
+
+        content = " ".join(words[i:]) if i < len(words) else ""
         return params, content
+
 
 
     def _cast(self, v: str) -> Union[int, float, str]:
