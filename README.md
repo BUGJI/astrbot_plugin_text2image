@@ -34,7 +34,7 @@ texttool generate 请输入文本
 
 `texttool generate mode:char 请输入文本`
 
-> 结果：输出五个文字的图片
+> 结果：输出五个字的每一张图片 请、输、入、文、本
 
 #### 多图模式的文件输出规则
 当使用非 `single`（单图）模式时，任务会加入排程，完成后发送压缩包，文件命名规则为：
@@ -73,19 +73,20 @@ mode 参数支持 5 种生成模式，参数格式为 `mode:值`：
 可指定程序支持的字体，参数格式为 `font:字体名`：
 
 1. 查看可用字体列表：
-   ```bash
-   texttool list
-   ```
+   
+   `texttool list`
+   
 2. 使用指定字体生成图片（需管理员提前配置字体文件）：
-   ```bash
-   texttool generate mode:word font:Arial hello world
-   ```
-   > 字体文件需放置在 `astrbot_plugin_text2image/ttf` 目录
+   
+   `texttool generate mode:word font:Arial hello world`
+   
+   > 字体文件需放置在 `astrbot_plugin_text2image/fonts` 目录
 
 ## 🚀 进阶教程
 按「常用度」分为三类参数，可组合使用。
 
 ### 1. 常用参数
+
 #### 生成模式（重复说明，可根据需求保留/删除）
 同「新手教程 - 核心参数：生成模式」
 
