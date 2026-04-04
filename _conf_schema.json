@@ -1,0 +1,55 @@
+{
+  "default_font": {
+    "description": "默认字体名称",
+    "hint": "填入 fonts 目录下字体文件名（不带扩展名），如 simsun.ttf 则填 simsun",
+    "type": "string",
+    "default": "宋体2"
+  },
+  "limit": {
+    "description": "限制设置",
+    "type": "object",
+    "items": {
+      "max_images_per_task": {
+        "description": "单次任务最大图片数",
+        "type": "int",
+        "default": 1000
+      },
+      "max_chars_per_task": {
+        "description": "单次任务最大字符数",
+        "type": "int",
+        "default": 20000
+      },
+      "max_task": {
+        "description": "队列最大任务数",
+        "type": "int",
+        "default": 4
+      },
+      "fonts_per_page": {
+        "description": "每页显示字体数量",
+        "type": "int",
+        "default": 20
+      }
+    }
+  },
+  "compatibility": {
+    "description": "兼容性设置",
+    "type": "object",
+    "items": {
+      "single_image_send_by_file": {
+        "description": "单图以文件方式发送",
+        "type": "bool",
+        "default": true
+      },
+      "blacklist": {
+        "description": "黑名单群号列表",
+        "type": "list",
+        "default": []
+      },
+      "blacklist_notice": {
+        "description": "黑名单提示",
+        "type": "string",
+        "default": "当前群暂不支持此功能。"
+      }
+    }
+  }
+}
