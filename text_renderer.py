@@ -5,6 +5,8 @@ import asyncio
 import re
 import base64
 import os
+# TODO: 添加 markdown 库支持 Markdown 渲染
+# import markdown
 
 
 async def render_text(
@@ -12,6 +14,7 @@ async def render_text(
     font_path: str = None,
     output_path: str = "out.png",
     css: str = "",
+    ext: str = None,
     **kwargs
 ):
     """
@@ -65,6 +68,12 @@ async def render_text(
     
     logger.info(f"[DEBUG] 原始 css 参数: {css}")
     
+    # TODO: 处理扩展参数 (ext)
+    # 示例: ext="markdown" 时将 Markdown 转换为 HTML
+    # if ext == "markdown":
+    #     from markdown import markdown as md
+    #     text = md(text, extensions=['extra', 'codehilite'])
+    
     # 解析用户 CSS
     user_css = ""
     if css:
@@ -107,20 +116,37 @@ async def render_text(
             font-family: {font_family}, sans-serif;
             font-size: 300px;
             color: #000000;
-            word-break: break-word;
+            word-break: keep-all;
             text-align: left;
-            line-height: 1.2;
-            white-space: pre-wrap;
+            line-height: 1;
+            white-space: pre;
             display: inline-block;
-            min-width: 100px;
         }}
+        .markdown-body {{
+            font-family: {font_family}, sans-serif;
+            font-size: 24px;
+            color: #000000;
+            line-height: 1.6;
+        }}
+        .markdown-body h1 {{ font-size: 2em; margin: 0.5em 0; }}
+        .markdown-body h2 {{ font-size: 1.5em; margin: 0.5em 0; }}
+        .markdown-body h3 {{ font-size: 1.25em; margin: 0.5em 0; }}
+        .markdown-body p {{ margin: 0.5em 0; }}
+        .markdown-body code {{ background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }}
+        .markdown-body pre {{ background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }}
+        .markdown-body blockquote {{ border-left: 3px solid #ddd; padding-left: 10px; color: #666; }}
+        .markdown-body ul, .markdown-body ol {{ margin: 0.5em 0; padding-left: 1.5em; }}
+        .markdown-body li {{ margin: 0.2em 0; }}
         {user_css}
     </style>
 </head>
 <body>
     <div class="text">{text}</div>
 </body>
-</html>"""
+</html>
+<!-- TODO: 支持扩展参数 ext，如 markdown 渲染 -->
+<!-- 使用: texttool generate ext:"markdown" ... -->
+<!-- 需安装: pip install markdown -->"""
     
     # logger.info(f"[DEBUG] 最终 HTML 内容:\n{html_content}")
     

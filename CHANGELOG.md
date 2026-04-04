@@ -9,11 +9,13 @@ All notable changes to this project will be documented in this file.
 - CSS 参数支持引号包裹（支持值内含空格）
 - 生成图片前显示预计时间
 - 新增 `mode:article` 文章模式，支持保留空格换行和 CSS 定义宽度自动换行
+- 新增 `ext` 扩展参数（预留 Markdown 支持）
 
 ### Improved
 - `listall` 图片分页显示改进，每页顶部显示页码和使用提示
 - 字体序号独立列显示，更清晰
 - 渲染器 CSS 优化，支持 width 属性固定宽度
+- single 模式恢复为单行横向输出
 
 ## [0.3.1] - 2026-04-04
 

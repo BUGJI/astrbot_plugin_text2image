@@ -50,6 +50,7 @@ class TextTool(Star):
         "font",
         "mode",
         "css",
+        "ext",
     }
 
     def __init__(self, context: Context, config: AstrBotConfig):
@@ -448,8 +449,12 @@ class TextTool(Star):
         else:
             time_text = f"{estimated_seconds} 秒"
         yield event.plain_result(f"正在生成中... 预计还需 {time_text}")
+        
+        # 提取扩展参数
+        ext = params.pop("ext", None)
+        
         try:
-            await self._process_and_send(event, params, tokens)
+            await self._process_and_send(event, params, tokens, ext=ext)
         except Exception as e:
             logger.exception(f"生成图片失败: {e}")
             yield event.plain_result(f"生成失败: {e}")
@@ -459,7 +464,7 @@ class TextTool(Star):
     # 核心处理
     # =======================
 
-    async def _process_and_send(self, event, params, tokens):
+    async def _process_and_send(self, event, params, tokens, ext=None):
 
         uid = hashlib.sha256(str(event.get_sender_id()).encode()).hexdigest()[:8]
         ts = int(time.time() * 1000)
@@ -469,6 +474,10 @@ class TextTool(Star):
 
         font_name = params.pop("font", self.default_font)
         font_path = self._resolve_font(font_name)
+
+        # 将扩展参数加入渲染参数
+        if ext:
+            params["ext"] = ext
 
         images = await asyncio.to_thread(
             _render_batch,
