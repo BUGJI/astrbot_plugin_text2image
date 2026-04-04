@@ -52,9 +52,9 @@ texttool generate 你好世界
 
 | 参数 | 说明 | 示例 |
 |------|------|------|
-| `font` | 字体名称或编号，使用 `texttool list` 查看 | `font:宋体` 或 `font:1` |
+| `font` | 字体名称，使用 `texttool list` 查看可用字体 | `font:宋体` |
 | `mode` | 渲染模式 | 见下方 |
-| `css` | 自定义 CSS 样式，值含空格时用引号包裹 | `css:color:red;font-size:80px` 或 `css:"color:red;font-family:微软雅黑"` |
+| `css` | 自定义 CSS 样式 | `css:color:red;font-size:80px` |
 
 #### 渲染模式 (mode)
 
@@ -63,22 +63,24 @@ texttool generate 你好世界
 - `word`：按单词渲染（空格分隔）
 - `line`：按行渲染
 - `token`：按 `|` 分隔渲染
+- `article`：文章模式，保留完整空格和换行，支持 CSS 定义宽度自动换行
 
 ### CSS 自定义
 
 可以使用 `css:` 参数自定义样式：
 
 ```
-texttool generate css:color:#FF0000;font-size:100px;font-weight:bold 你好
+texttool generate css:"color:#FF0000;font-size:100px;font-weight:bold" 你好
+
+# 同样，css代码支持换行和空格，让其看起来更可读
+texttool generate css:"
+color:#FF0000;
+font-size:100px;
+font-weight:bold
+" 你好
 ```
 
-支持的 CSS 属性：
-- `color` - 文字颜色
-- `font-size` - 字体大小
-- `font-weight` - 字重（bold/normal）
-- `font-family` - 字体族
-- `text-shadow` - 文字阴影
-- 等等任何 CSS 属性
+支持任意可被Chromium解析的CSS属性，直接作用
 
 ### 示例
 
@@ -86,28 +88,40 @@ texttool generate css:color:#FF0000;font-size:100px;font-weight:bold 你好
 # 简单使用
 texttool generate Hello World
 
-# 指定字体（名称或编号）
+# 指定字体
 texttool generate font:黑体 你好
-texttool generate font:1 你好
 
-# CSS 样式（值含空格时用引号包裹）
-texttool generate css:color:red;font-size:120px 警告
-texttool generate css:"color:red;font-family:微软雅黑" 你好
+# 红色大字
+texttool generate css:"color:red;font-size:120px" 警告
 
 # 多行渲染
-texttool generate mode:line 第一行\n第二行\n第三行
+texttool generate mode:line 第一行
+第二行
+第三行
 
-# 逐字渲染
-texttool generate mode:char 你好世界
+# 混色字
+texttool generate css:"
+background-clip:text;
+color:transparent;
+background:linear-gradient(45deg,#f09,#00f);
+-webkit-background-clip:text;" AI超级配色大字
+
+# 文章模式（保留空格换行，支持CSS定义宽度自动换行）
+texttool generate mode:article css:"width:500px;font-size:40px" 标题
+
+第一段内容，会根据宽度自动换行。
+
+第二段内容。
+
 ```
 
 ### 查看字体列表
 
 ```
 # 文字列表（分页）
-texttool list
+texttool list 可以加页码
 
-# 图片形式查看所有字体（首次需要缓存）
+# 图片形式查看所有字体
 texttool listall
 ```
 
@@ -116,14 +130,16 @@ texttool listall
 在 AstrBot 管理界面配置：
 
 - **默认字体**：不填时使用的字体
-- **每页显示字体数量**：`listall` 图片分页数量
 - **单次最大字符数**：防止生成过多
 - **单次最大图片数**：防止刷屏
 - **黑名单**：禁用的群号
 
 ## 字体说明
 
-本插件使用 **base64 内嵌** 方式加载字体，无需担心跨域或路径问题。只需将字体文件放入 `fonts/` 目录即可自动识别。
+- 自定义字体文件
+  只需将字体文件放入 `fonts/` 目录即可自动识别。
+- 字体选择
+  不一定要在font参数后面填字体名字，编号也可以：font:123
 
 支持的格式：
 - `.ttf` - TrueType Font

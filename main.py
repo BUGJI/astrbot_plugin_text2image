@@ -650,6 +650,9 @@ class TextTool(Star):
             return [l for l in text.splitlines() if l.strip()]
         if mode == "token":
             return [t for t in text.split("|") if t.strip()]
+        if mode == "article":
+            # 保留完整空格和换行
+            return [text]
 
         return [text.strip()]
 

@@ -8,10 +8,12 @@ All notable changes to this project will be documented in this file.
 - 字体匹配支持编号匹配（`font:1` 使用第一个字体）
 - CSS 参数支持引号包裹（支持值内含空格）
 - 生成图片前显示预计时间
+- 新增 `mode:article` 文章模式，支持保留空格换行和 CSS 定义宽度自动换行
 
 ### Improved
 - `listall` 图片分页显示改进，每页顶部显示页码和使用提示
 - 字体序号独立列显示，更清晰
+- 渲染器 CSS 优化，支持 width 属性固定宽度
 
 ## [0.3.1] - 2026-04-04
 

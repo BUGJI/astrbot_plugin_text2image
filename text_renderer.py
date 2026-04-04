@@ -107,11 +107,12 @@ async def render_text(
             font-family: {font_family}, sans-serif;
             font-size: 300px;
             color: #000000;
-            word-break: keep-all;
-            text-align: center;
-            line-height: 1;
+            word-break: break-word;
+            text-align: left;
+            line-height: 1.2;
             white-space: pre-wrap;
             display: inline-block;
+            min-width: 100px;
         }}
         {user_css}
     </style>
