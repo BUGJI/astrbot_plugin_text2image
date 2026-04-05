@@ -117,10 +117,10 @@ class TextTool(Star):
 
         参数选择规则：
         - mode:char - 当用户说"每个字独立"、"逐字"时
-        - mode:article - 当内容有多段落、需要自动换行时（推荐默认）
-        - mode:single - 简短单行内容
-        - mode:line - 每行分别渲染
-        - mode:word - 按单词渲染
+        - mode:article - 当内容有多段落、需要自动换行时（推荐默认）除非用户主动要求"一个一个发"，否则不要多次调用此
+        - mode:single - 简短单行内容，除非用户主动要求"一个一个发"，否则不要多次调用此
+        - mode:line - 每行分别渲染，填写参数时建议使用\\n分割，以便程序处理
+        - mode:word - 按单词渲染，填写参数时建议使用空格分割，以便程序处理
         - mode:token - 按|分隔渲染
 
         Args:
@@ -149,14 +149,33 @@ class TextTool(Star):
         
         yield event.plain_result(f"使用参数: {' '.join(param_info)}")
         
-        # 调用现有的生成逻辑
-        tokens = [content]
+        # 创建后台任务执行生成（避免超时）
+        async def background_generate(params, tokens):
+            try:
+                await self._process_and_send(event, params, tokens)
+            except Exception as e:
+                logger.exception(f"后台生成图片失败: {e}")
+                await event.plain_result(f"生成失败: {e}")
         
-        try:
-            await self._process_and_send(event, params, tokens)
-        except Exception as e:
-            logger.exception(f"生成图片失败: {e}")
-            yield event.plain_result(f"生成失败: {e}")
+        # 按 mode 分割内容
+        tokens = self._split_content(content, mode)
+        
+        # 计算预计时间
+        estimated_seconds = len(tokens) * 6
+        if estimated_seconds >= 60:
+            minutes = estimated_seconds // 60
+            seconds = estimated_seconds % 60
+            if seconds > 0:
+                time_text = f"{minutes} 分钟 {seconds} 秒"
+            else:
+                time_text = f"{minutes} 分钟"
+        else:
+            time_text = f"{estimated_seconds} 秒"
+        
+        # 立即创建后台任务
+        asyncio.create_task(background_generate(params.copy(), tokens))
+        
+        yield event.plain_result(f"任务已下发，图片生成中... 预计 {time_text}")
 
     @texttool.command("help")
     async def help(self, event: AstrMessageEvent):
