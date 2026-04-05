@@ -78,10 +78,15 @@ async def render_text(
     user_css = ""
     if css:
         props = []
-        parts = re.split(r'[;\s]+', css)
+        # 只在分号处分割，保留冒号后的完整内容
+        parts = css.split(";")
         for part in parts:
             part = part.strip()
             if not part or ":" not in part:
+                continue
+            # 跳过空属性
+            value = part.split(":", 1)[1].strip()
+            if not value:
                 continue
             props.append(f"{part} !important;")
             logger.info(f"[DEBUG] 添加CSS属性: {part} !important;")

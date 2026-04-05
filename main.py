@@ -362,7 +362,6 @@ class TextTool(Star):
     </table>
 </body>
 </html>"""
-        
         # 生成最终图片
         uid = hashlib.sha256(str(event.get_sender_id()).encode()).hexdigest()[:8]
         ts = int(time.time() * 1000)
