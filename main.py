@@ -104,6 +104,60 @@ class TextTool(Star):
     def texttool(self):
         pass
 
+    @filter.llm_tool(name="textgen")
+    async def textgen(
+        self,
+        event: AstrMessageEvent,
+        content: str,
+        font: str = "",
+        mode: str = "article",
+        css: str = ""
+    ):
+        '''文本转图片生成器。根据参数生成文本图片。
+
+        参数选择规则：
+        - mode:char - 当用户说"每个字独立"、"逐字"时
+        - mode:article - 当内容有多段落、需要自动换行时（推荐默认）
+        - mode:single - 简短单行内容
+        - mode:line - 每行分别渲染
+        - mode:word - 按单词渲染
+        - mode:token - 按|分隔渲染
+
+        Args:
+            content(string): 要渲染的文本内容，必须
+            font(string): 字体名称或编号(可选，如"宋体"或"1")
+            mode(string): 渲染模式，默认为article
+            css(string): CSS样式(可选，如"color:red;font-size:100px")
+        '''
+        params = {}
+        
+        # 处理参数
+        if font:
+            params["font"] = font
+        if mode:
+            params["mode"] = mode
+        if css:
+            params["css"] = css
+        
+        # 显示使用的参数
+        param_info = []
+        if font:
+            param_info.append(f"font:{font}")
+        param_info.append(f"mode:{mode}")
+        if css:
+            param_info.append(f"css:{css}")
+        
+        yield event.plain_result(f"使用参数: {' '.join(param_info)}")
+        
+        # 调用现有的生成逻辑
+        tokens = [content]
+        
+        try:
+            await self._process_and_send(event, params, tokens)
+        except Exception as e:
+            logger.exception(f"生成图片失败: {e}")
+            yield event.plain_result(f"生成失败: {e}")
+
     @texttool.command("help")
     async def help(self, event: AstrMessageEvent):
         """显示帮助信息"""

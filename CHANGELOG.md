@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - 生成图片前显示预计时间
 - 新增 `mode:article` 文章模式，支持保留空格换行和 CSS 定义宽度自动换行
 - 新增 `ext` 扩展参数（预留 Markdown 支持）
+- 新增 LLM Tool（`textgen`），支持 AI 自然语言生成图片
 
 ### Improved
 - `listall` 图片分页显示改进，每页顶部显示页码和使用提示
