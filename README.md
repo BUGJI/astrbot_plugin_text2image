@@ -1,8 +1,10 @@
-# astrbot_plugin_text2image
+# 📕 请输入文本
 
-将文本渲染为图片的 AstrBot 插件，使用 Playwright Chromium 渲染。
+将文本渲染为图片，支持任意Chromium CSS样式
 
-## 安装
+支持自然语言生成文本内容
+
+## ⚙ 安装
 
 ```bash
 pip install playwright
@@ -11,7 +13,7 @@ playwright install chromium
 
 将插件文件夹放入 AstrBot 的插件目录即可。
 
-## 目录结构
+## 📂 目录结构
 
 ```
 astrbot_plugin_text2image/
@@ -23,7 +25,7 @@ astrbot_plugin_text2image/
 
 **重要**：将字体文件（.ttf/.otf/.ttc）放入 `fonts/` 目录。
 
-## 使用方法
+## ❓ 使用方法
 
 ### 基本命令
 
@@ -145,7 +147,7 @@ texttool list 可以加页码
 texttool listall
 ```
 
-## 配置
+## ⚙ 配置
 
 在 AstrBot 管理界面配置：
 
@@ -154,7 +156,7 @@ texttool listall
 - **单次最大图片数**：防止刷屏
 - **黑名单**：禁用的群号
 
-## 字体说明
+## ❗ 字体说明
 
 - 自定义字体文件
   只需将字体文件放入 `fonts/` 目录即可自动识别。
@@ -166,12 +168,12 @@ texttool listall
 - `.otf` - OpenType Font
 - `.ttc` - TrueType Collection
 
-## 依赖
+## 💩 依赖
 
 - playwright
 - Pillow
 
-## 鸣谢
+## 🩷 鸣谢
 
 - 基于 Playwright Chromium 渲染
 - MiniMax-M2.5
