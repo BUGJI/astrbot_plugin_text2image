@@ -85,6 +85,14 @@ class TextTool(Star):
             logger.warning("max_concurrent_font_samples <= 0，自动修正为 1")
             self.max_concurrent_font_samples = 1
         self.fonts_per_page = int(self.config.limit.get("fonts_per_page", 20))
+        self.font_list_columns = int(self.config.limit.get("font_list_columns", 3))
+        # 校验 font_list_columns 范围
+        if self.font_list_columns < 1:
+            logger.warning(f"font_list_columns < 1，自动修正为 1")
+            self.font_list_columns = 1
+        elif self.font_list_columns > self.fonts_per_page:
+            logger.warning(f"font_list_columns > fonts_per_page，自动修正为 {self.fonts_per_page}")
+            self.font_list_columns = self.fonts_per_page
         self.default_font = self.config.get("default_font", "宋体2")
         
         # self.queue = asyncio.Queue(maxsize=self.max_task)
@@ -269,7 +277,8 @@ class TextTool(Star):
             ])
             missing_count = sum(results)
 
-        # 构建 HTML 行
+        # 构建 HTML 行（网格布局）
+        columns = self.font_list_columns
         for idx, (font_name, font_path) in enumerate(sorted_fonts):
             font_img_path = font_samples_dir / f"{font_path.stem}.png"
 
@@ -285,20 +294,33 @@ class TextTool(Star):
             if idx % fonts_per_page == 0:
                 page_num = idx // fonts_per_page + 1
                 font_rows.append(f'''<tr>
-                    <td colspan="1" class="page-break">页 {page_num}</td>
-                    <td colspan="2" class="page-tip" style="text-align:left">使用 texttool list <页码> 复制字体昵称</td>
+                    <td colspan="{columns}" class="page-break">页 {page_num}</td>
+                </tr>''')
+                font_rows.append(f'''<tr>
+                    <td colspan="{columns}" class="page-tip" style="text-align:left">使用 texttool list <页码> 复制字体昵称</td>
                 </tr>''')
 
-            font_rows.append(f"""<tr>
-                <td class="font-index">{idx + 1}</td>
-                <td class="font-name">{font_name}{is_default}</td>
-                <td class="font-sample"><img src="{rel_path}" height="60"></td>
-            </tr>""")
+            # 每行开始新行
+            if idx % columns == 0:
+                font_rows.append('<tr>')
+            
+            # 添加单个字体单元格
+            font_rows.append(f"""<td class=\"font-cell\">
+                <div class=\"font-index\">{idx + 1}</div>
+                <div class=\"font-name\">{font_name}{is_default}</div>
+                <div class=\"font-sample\"><img src=\"{rel_path}\" height=\"60\"></div>
+            </td>""")
+            
+            # 每行结束或最后一个字体时闭合行
+            if (idx + 1) % columns == 0 or idx == len(sorted_fonts) - 1:
+                font_rows.append('</tr>')
         
         # 页尾提示
         font_rows.append(f'''<tr>
-            <td colspan="1" class="page-break">底部</td>
-            <td colspan="2" class="page-tip" style="text-align:right">使用 texttool list <页码> 复制字体</td>
+            <td colspan="{columns}" class="page-break">底部</td>
+        </tr>''')
+        font_rows.append(f'''<tr>
+            <td colspan="{columns}" class="page-tip" style="text-align:right">使用 texttool list <页码> 复制字体</td>
         </tr>''')
 
         if missing_count > 0:
@@ -332,33 +354,39 @@ class TextTool(Star):
         html, body {{ background: #FFFFFF; padding: 20px; }}
         table {{ width: 100%; border-collapse: collapse; }}
         td {{ background: #FFFFFF; }}
+        .font-cell {{
+            text-align: center;
+            vertical-align: top;
+            padding: 8px;
+            border-right: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+            width: {100 // columns}%;
+        }}
         .font-index {{
             font-family: sans-serif;
-            font-size: 20px;
-            padding: 8px 16px;
+            font-size: 16px;
+            padding: 4px;
             text-align: center;
-            border-bottom: 1px solid #ddd;
-            width: 80px;
             color: #888;
         }}
         .font-name {{
             font-family: sans-serif;
-            font-size: 20px;
-            padding: 8px 16px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-            width: 30%;
+            font-size: 14px;
+            padding: 4px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }}
         .font-sample {{
-            font-size: 48px;
-            padding: 8px 16px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
             vertical-align: middle;
-            min-width: 200px;
         }}
         .font-sample img {{
-            display: block;
+            display: inline-block;
+            max-width: 100%;
+            height: auto;
         }}
         .page-break {{
             font-family: sans-serif;

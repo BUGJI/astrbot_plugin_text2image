@@ -40,6 +40,12 @@
         "hint": "控制 texttool listall 命令同时渲染的字体示例数量，增大可提升缓存生成速度但增加资源占用",
         "type": "int",
         "default": 8
+      },
+      "font_list_columns": {
+        "description": "字体列表每行显示的字体数量",
+        "hint": "控制 texttool listall 每行显示多少个字体预览，小于 1 设为 1，大于每页数量则设为每页数量",
+        "type": "int",
+        "default": 3
       }
     }
   },
