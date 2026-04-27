@@ -80,6 +80,10 @@ class TextTool(Star):
         if self.max_concurrent_renders <= 0:
             logger.warning("max_concurrent_renders <= 0，自动修正为 1")
             self.max_concurrent_renders = 1
+        self.max_concurrent_font_samples = int(self.config.limit.get("max_concurrent_font_samples", 8))
+        if self.max_concurrent_font_samples <= 0:
+            logger.warning("max_concurrent_font_samples <= 0，自动修正为 1")
+            self.max_concurrent_font_samples = 1
         self.fonts_per_page = int(self.config.limit.get("fonts_per_page", 20))
         self.default_font = self.config.get("default_font", "宋体2")
         
@@ -218,35 +222,62 @@ class TextTool(Star):
         if cached_count == 0:
             yield event.plain_result("⚠️ 第一次使用需要缓存大量图片，可能需要较长时间，请耐心等待...")
         
-        sample_text = "你好123Abc"
+        sample_text = "你好 123Abc"
         font_rows = []
         missing_count = 0
-        
+
         # 预先渲染每个字体的示例图（带缓存），并按 fonts_per_page 插入分页标记
         sorted_fonts = sorted(fonts.items(), key=lambda x: x[0])
         total_fonts = len(sorted_fonts)
         fonts_per_page = self.fonts_per_page
 
+        # 收集需要渲染的字体任务
+        render_tasks = []
         for idx, (font_name, font_path) in enumerate(sorted_fonts):
-            # 检查缓存
             font_img_path = font_samples_dir / f"{font_path.stem}.png"
-            
             if not font_img_path.exists():
-                logger.info(f"[DEBUG] 渲染字体示例: {font_name}")
-                # 使用同步版本直接渲染
-                try:
-                    await asyncio.get_event_loop().run_in_executor(None, lambda: render_text_sync(
-                        text=sample_text,
-                        font_path=str(font_path),
-                        output_path=str(font_img_path)
-                    ))
-                    missing_count += 1
-                except Exception as e:
-                    logger.warning(f"[WARN] 渲染字体 {font_name} 失败: {e}")
-                    continue
-            
+                render_tasks.append((idx, font_name, font_path, font_img_path))
+
+        # 并发渲染缺失的字体示例图
+        if render_tasks:
+            logger.info(f"[DEBUG] 需要渲染 {len(render_tasks)} 个字体示例图")
+            yield event.plain_result(f"正在生成 {len(render_tasks)} 个字体示例图...")
+
+            semaphore = asyncio.Semaphore(self.max_concurrent_font_samples)
+
+            async def render_font_sample(task_idx, task_font_name, task_font_path, task_font_img_path):
+                async with semaphore:
+                    try:
+                        logger.info(f"[DEBUG] 渲染字体示例：{task_font_name}")
+                        await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: render_text_sync(
+                                text=sample_text,
+                                font_path=str(task_font_path),
+                                output_path=str(task_font_img_path)
+                            )
+                        )
+                        return True
+                    except Exception as e:
+                        logger.warning(f"[WARN] 渲染字体 {task_font_name} 失败：{e}")
+                        return False
+
+            # 并发执行所有渲染任务
+            results = await asyncio.gather(*[
+                render_font_sample(tidx, tname, tpath, timgpath)
+                for tidx, tname, tpath, timgpath in render_tasks
+            ])
+            missing_count = sum(results)
+
+        # 构建 HTML 行
+        for idx, (font_name, font_path) in enumerate(sorted_fonts):
+            font_img_path = font_samples_dir / f"{font_path.stem}.png"
+
+            if not font_img_path.exists():
+                continue
+
             is_default = " (默认)" if font_name == self.default_font else ""
-            
+
             # 使用相对路径：cache_path → font_samples 是兄弟目录
             rel_path = f"../font_samples/{font_img_path.name}"
 

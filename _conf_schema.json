@@ -34,6 +34,12 @@
         "hint": "控制单个任务内同时渲染的图片数量，增大可提升速度但增加资源占用",
         "type": "int",
         "default": 8
+      },
+      "max_concurrent_font_samples": {
+        "description": "字体示例图渲染并发数",
+        "hint": "控制 texttool listall 命令同时渲染的字体示例数量，增大可提升缓存生成速度但增加资源占用",
+        "type": "int",
+        "default": 8
       }
     }
   },
