@@ -5,23 +5,22 @@ import asyncio
 import re
 import base64
 import os
+from typing import List, Optional
 # TODO: 添加 markdown 库支持 Markdown 渲染
 # import markdown
 
 
-async def render_text(
+async def render_single_image(
     text: str,
-    font_path: str = None,
-    output_path: str = "out.png",
+    font_path: str,
+    output_path: str,
     css: str = "",
     ext: str = None,
     **kwargs
-):
+) -> str:
     """
-    使用 Playwright Chromium 渲染文本为图片
-    页面大小自动适配文字内容
+    渲染单个文本为图片（异步，可并发）
     """
-    
     if not text or not text.strip():
         raise ValueError("text cannot be empty")
     
@@ -50,52 +49,44 @@ async def render_text(
                     font_data = base64.b64encode(f.read()).decode("utf-8")
                 
                 # 根据扩展名确定 MIME 类型
-                ext = font_file_path.suffix.lower()
+                ext_suffix = font_file_path.suffix.lower()
                 mime_type = {
                     ".ttf": "font/ttf",
                     ".otf": "font/otf",
                     ".ttc": "font/collection",
-                }.get(ext, "font/ttf")
+                }.get(ext_suffix, "font/ttf")
                 
                 font_src = f"url('data:{mime_type};base64,{font_data}')"
                 logger.info(f"[DEBUG] 字体 {font_name} 已转为 base64 嵌入")
             except Exception as e:
-                logger.warning(f"[WARN] 字体文件读取失败: {font_file_path}, 错误: {e}")
+                logger.warning(f"[WARN] 字体文件读取失败：{font_file_path}, 错误：{e}")
                 font_src = "local('sans-serif')"
         else:
-            logger.warning(f"[WARN] 字体文件不存在: {font_path}")
+            logger.warning(f"[WARN] 字体文件不存在：{font_path}")
             font_src = "local('sans-serif')"
     
-    logger.info(f"[DEBUG] 原始 css 参数: {css}")
-    
-    # TODO: 处理扩展参数 (ext)
-    # 示例: ext="markdown" 时将 Markdown 转换为 HTML
-    # if ext == "markdown":
-    #     from markdown import markdown as md
-    #     text = md(text, extensions=['extra', 'codehilite'])
+    logger.info(f"[DEBUG] 原始 css 参数：{css}")
     
     # 解析用户 CSS
     user_css = ""
     if css:
         props = []
-        # 只在分号处分割，保留冒号后的完整内容
         parts = css.split(";")
         for part in parts:
             part = part.strip()
             if not part or ":" not in part:
                 continue
-            # 跳过空属性
             value = part.split(":", 1)[1].strip()
             if not value:
                 continue
             props.append(f"{part} !important;")
-            logger.info(f"[DEBUG] 添加CSS属性: {part} !important;")
+            logger.info(f"[DEBUG] 添加 CSS 属性：{part} !important;")
         
         if props:
             user_css = ".text { " + " ".join(props) + " }"
             logger.info(f"[DEBUG] 生成的 user_css: {user_css}")
     
-    # 构建 HTML - 移除外层包裹，让页面自适应内容
+    # 构建 HTML
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -127,33 +118,13 @@ async def render_text(
             white-space: pre;
             display: inline-block;
         }}
-        .markdown-body {{
-            font-family: {font_family}, sans-serif;
-            font-size: 24px;
-            color: #000000;
-            line-height: 1.6;
-        }}
-        .markdown-body h1 {{ font-size: 2em; margin: 0.5em 0; }}
-        .markdown-body h2 {{ font-size: 1.5em; margin: 0.5em 0; }}
-        .markdown-body h3 {{ font-size: 1.25em; margin: 0.5em 0; }}
-        .markdown-body p {{ margin: 0.5em 0; }}
-        .markdown-body code {{ background: #f4f4f4; padding: 2px 4px; border-radius: 3px; }}
-        .markdown-body pre {{ background: #f4f4f4; padding: 10px; border-radius: 5px; overflow-x: auto; }}
-        .markdown-body blockquote {{ border-left: 3px solid #ddd; padding-left: 10px; color: #666; }}
-        .markdown-body ul, .markdown-body ol {{ margin: 0.5em 0; padding-left: 1.5em; }}
-        .markdown-body li {{ margin: 0.2em 0; }}
         {user_css}
     </style>
 </head>
 <body>
     <div class="text">{text}</div>
 </body>
-</html>
-<!-- TODO: 支持扩展参数 ext，如 markdown 渲染 -->
-<!-- 使用: texttool generate ext:"markdown" ... -->
-<!-- 需安装: pip install markdown -->"""
-    
-    # logger.info(f"[DEBUG] 最终 HTML 内容:\n{html_content}")
+</html>"""
     
     output_path = Path(output_path)
     
@@ -171,6 +142,45 @@ async def render_text(
     return str(output_path)
 
 
+async def render_batch_concurrent(
+    tokens: List[str],
+    folder: Path,
+    font_path: Path,
+    params: dict,
+    max_concurrent: int = 8
+) -> List[Path]:
+    """
+    并发渲染多个文本为图片
+    
+    Args:
+        tokens: 待渲染的文本列表
+        folder: 输出目录
+        font_path: 字体文件路径
+        params: 渲染参数 (css, ext 等)
+        max_concurrent: 最大并发数
+    
+    Returns:
+        渲染完成的图片路径列表
+    """
+    semaphore = asyncio.Semaphore(max_concurrent)
+    
+    async def render_with_semaphore(index: int, text: str) -> Path:
+        async with semaphore:
+            out = folder / f"{folder.name}_{index:08d}.png"
+            await render_single_image(
+                text=text,
+                font_path=str(font_path),
+                output_path=str(out),
+                **params
+            )
+            return out
+    
+    tasks = [render_with_semaphore(i, text) for i, text in enumerate(tokens)]
+    results = await asyncio.gather(*tasks)
+    
+    return list(results)
+
+
 def render_text_sync(
     text: str,
     font_path: str = None,
@@ -178,16 +188,13 @@ def render_text_sync(
     css: str = "",
     **kwargs
 ):
-    """同步封装"""
-    # 检查字体文件是否存在（支持绝对路径和相对路径）
+    """同步封装（单个渲染）"""
     if font_path:
         font_p = Path(font_path)
-        # 检查绝对路径
         if not font_p.exists():
-            # 尝试相对路径 .../plugins/astrbot_plugin_text2image/fonts/
             rel_font_path = Path("../../../plugins/astrbot_plugin_text2image/fonts") / font_p.name
             if not rel_font_path.exists():
-                logger.warning(f"字体文件不存在: 绝对路径={font_p} 相对路径={rel_font_path}")
-                raise FileNotFoundError(f"字体文件不存在: {font_path}")
+                logger.warning(f"字体文件不存在：绝对路径={font_p} 相对路径={rel_font_path}")
+                raise FileNotFoundError(f"字体文件不存在：{font_path}")
     
-    return asyncio.run(render_text(text, font_path, output_path, css, **kwargs))
+    return asyncio.run(render_single_image(text, font_path, output_path, css, **kwargs))

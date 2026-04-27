@@ -16,31 +16,24 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api.star import StarTools
 
 
-from .text_renderer import render_text_sync
+from .text_renderer import render_text_sync, render_batch_concurrent
 
 
-def _render_batch(
+async def _render_batch_async(
     tokens: List[str],
     folder: Path,
     font_path: Path,
     params: Dict[str, Any],
+    max_concurrent: int = 8,
 ) -> List[Path]:
-
-    images = []
-
-    for i, text in enumerate(tokens):
-        out = folder / f"{folder.name}_{i:08d}.png"
-
-        render_text_sync(
-            text=text,
-            font_path=str(font_path),
-            output_path=str(out),
-            **params
-        )
-
-        images.append(out)
-
-    return images
+    """异步并发渲染批次图片"""
+    return await render_batch_concurrent(
+        tokens=tokens,
+        folder=folder,
+        font_path=font_path,
+        params=params,
+        max_concurrent=max_concurrent,
+    )
 
 
 @register("texttool", "BUGJI", "文本转图片", "0.3.0", "https://github.com/BUGJI/astrbot_plugin_text2image")
@@ -83,6 +76,10 @@ class TextTool(Star):
             
         self.max_chars_per_task = int(self.config.limit.get("max_chars_per_task", 20000))
         self.max_images_per_task = int(self.config.limit.get("max_images_per_task", 1000))
+        self.max_concurrent_renders = int(self.config.limit.get("max_concurrent_renders", 8))
+        if self.max_concurrent_renders <= 0:
+            logger.warning("max_concurrent_renders <= 0，自动修正为 1")
+            self.max_concurrent_renders = 1
         self.fonts_per_page = int(self.config.limit.get("fonts_per_page", 20))
         self.default_font = self.config.get("default_font", "宋体2")
         
@@ -551,12 +548,13 @@ class TextTool(Star):
         if ext:
             params["ext"] = ext
 
-        images = await asyncio.to_thread(
-            _render_batch,
-            tokens,
-            folder,
-            font_path,
-            params,
+        # 使用异步并发渲染
+        images = await _render_batch_async(
+            tokens=tokens,
+            folder=folder,
+            font_path=font_path,
+            params=params,
+            max_concurrent=self.max_concurrent_renders,
         )
 
         zip_path: Optional[Path] = None

@@ -28,6 +28,12 @@
         "description": "每页显示字体数量",
         "type": "int",
         "default": 20
+      },
+      "max_concurrent_renders": {
+        "description": "单次任务内最大并发渲染数",
+        "hint": "控制单个任务内同时渲染的图片数量，增大可提升速度但增加资源占用",
+        "type": "int",
+        "default": 8
       }
     }
   },
