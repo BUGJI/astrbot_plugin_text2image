@@ -60,7 +60,7 @@ class TextTool(Star):
             self.data_path = StarTools.get_data_dir(self)
         else:
             self.data_path = Path(get_astrbot_data_path()) / "plugin_data" / self.name
-        
+        self.menu_image_send_by_file = self.config.compatibility.get("menu_image_send_by_file", False)
         self.cache_path = self.data_path / "cache"
         
         self.single_image_send_by_file = self.config.compatibility.get("single_image_send_by_file", True)
@@ -170,7 +170,7 @@ class TextTool(Star):
         tokens = self._split_content(content, mode)
         
         # 计算预计时间
-        estimated_seconds = len(tokens) * 6
+        estimated_seconds = (len(tokens) * 6) / self.max_concurrent_renders  # 预计时间（秒），假设每个 token 平均渲染时间为 6 秒，除以并发线程数
         if estimated_seconds >= 60:
             minutes = estimated_seconds // 60
             seconds = estimated_seconds % 60
@@ -184,7 +184,8 @@ class TextTool(Star):
         # 立即创建后台任务
         asyncio.create_task(background_generate(params.copy(), tokens))
         
-        yield event.plain_result(f"任务已下发，图片生成中... 预计 {time_text}")
+        yield event.plain_result(f"任务已下发，图片生成中... 预计 {time_text}" + 
+                                 f" (已使用{self.max_concurrent_renders}线程渲染)" if self.max_concurrent_renders > 1 else "")
 
     @texttool.command("help")
     async def help(self, event: AstrMessageEvent):
@@ -248,7 +249,7 @@ class TextTool(Star):
 
         # 并发渲染缺失的字体示例图
         if render_tasks:
-            logger.info(f"[DEBUG] 需要渲染 {len(render_tasks)} 个字体示例图")
+            logger.debug(f"[DEBUG] 需要渲染 {len(render_tasks)} 个字体示例图")
             yield event.plain_result(f"正在生成 {len(render_tasks)} 个字体示例图...")
 
             semaphore = asyncio.Semaphore(self.max_concurrent_font_samples)
@@ -256,7 +257,7 @@ class TextTool(Star):
             async def render_font_sample(task_idx, task_font_name, task_font_path, task_font_img_path):
                 async with semaphore:
                     try:
-                        logger.info(f"[DEBUG] 渲染字体示例：{task_font_name}")
+                        logger.debug(f"[DEBUG] 渲染字体示例：{task_font_name}")
                         await asyncio.get_event_loop().run_in_executor(
                             None,
                             lambda: render_text_sync(
@@ -340,8 +341,20 @@ class TextTool(Star):
 
         # 检查缓存是否有效
         if cached_img_path.exists():
-            logger.info(f"[DEBUG] 使用缓存的字体列表图片: {cached_img_path}")
-            yield event.image_result(str(cached_img_path))
+            logger.debug(f"[DEBUG] 使用缓存的字体列表图片: {cached_img_path} 发送模式: {self.menu_image_send_by_file}")
+            if self.menu_image_send_by_file == "image":
+                yield event.image_result(str(cached_img_path))
+            elif self.menu_image_send_by_file == "file":
+                # yield event.plain_result("正在发送字体列表图片（文件方式）...")
+                await event.send(event.chain_result([CompFile(file=str(cached_img_path), name="font_list.png")]))
+            elif self.menu_image_send_by_file == "zipfile":
+                # yield event.plain_result("正在发送字体列表图片（压缩包方式）...")
+                zip_path = self.cache_path / f"font_lists.zip"
+                with zipfile.ZipFile(zip_path, 'w') as zf:
+                    zf.write(cached_img_path, arcname="font_list.png")
+                # yield event.chain_result(CompFile(file=str(zip_path), name=""))
+                await event.send(event.chain_result([CompFile(file=str(zip_path), name="font_list.zip")]))
+            
             return
         
         # 构建 HTML（使用相对路径引用缓存图片）
@@ -446,11 +459,18 @@ class TextTool(Star):
             await asyncio.get_event_loop().run_in_executor(None, lambda: asyncio.run(render()))
             # 缓存生成的图片
             shutil.copy(str(img_path), str(cached_img_path))
-            # 根据配置决定以图片还是文件形式发送
-            if self.single_image_send_by_file:
-                yield event.chain_result([CompFile(file=str(img_path), name=img_path.name)])
-            else:
-                yield event.image_result(str(img_path))
+            if self.menu_image_send_by_file == "image":
+                yield event.image_result(str(cached_img_path))
+            elif self.menu_image_send_by_file == "file":
+                # yield event.plain_result("正在发送字体列表图片（文件方式）...")
+                await event.send(event.chain_result([CompFile(file=str(cached_img_path), name="font_list.png")]))
+            elif self.menu_image_send_by_file == "zipfile":
+                # yield event.plain_result("正在发送字体列表图片（压缩包方式）...")
+                zip_path = self.cache_path / f"font_lists.zip"
+                with zipfile.ZipFile(zip_path, 'w') as zf:
+                    zf.write(cached_img_path, arcname="font_list.png")
+                # yield event.chain_result(CompFile(file=str(zip_path), name=""))
+                await event.send(event.chain_result([CompFile(file=str(zip_path), name="font_list.zip")]))
         except Exception as e:
             logger.exception(f"生成字体列表失败: {e}")
             yield event.plain_result(f"生成失败: {e}")
@@ -570,7 +590,7 @@ class TextTool(Star):
             return
 
         # 直接处理，移除队列
-        estimated_seconds = len(tokens) * 6  # 预计时间（秒）
+        estimated_seconds = (len(tokens) * 6) / self.max_concurrent_renders  # 预计时间（秒）
         if estimated_seconds >= 60:
             minutes = estimated_seconds // 60
             seconds = estimated_seconds % 60
@@ -580,7 +600,8 @@ class TextTool(Star):
                 time_text = f"{minutes} 分钟"
         else:
             time_text = f"{estimated_seconds} 秒"
-        yield event.plain_result(f"正在生成中... 预计还需 {time_text}")
+        yield event.plain_result(f"正在生成中... 预计还需 {time_text}" + 
+                                 f" (已使用{self.max_concurrent_renders}线程渲染)" if self.max_concurrent_renders > 1 else "")
         
         # 提取扩展参数
         ext = params.pop("ext", None)
