@@ -56,7 +56,13 @@
       "single_image_send_by_file": {
         "description": "单图以文件方式发送",
         "type": "bool",
-        "default": true
+        "default": false
+      },
+      "menu_image_send_by_file": {
+        "description": "菜单图片发送模式",
+        "type": "string",
+        "options": ["image", "file", "zipfile"],
+        "default": "image"
       },
       "blacklist": {
         "description": "黑名单群号列表",
