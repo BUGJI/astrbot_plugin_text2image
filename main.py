@@ -16,31 +16,24 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api.star import StarTools
 
 
-from .text_renderer import render_text_sync
+from .text_renderer import render_text_sync, render_batch_concurrent
 
 
-def _render_batch(
+async def _render_batch_async(
     tokens: List[str],
     folder: Path,
     font_path: Path,
     params: Dict[str, Any],
+    max_concurrent: int = 8,
 ) -> List[Path]:
-
-    images = []
-
-    for i, text in enumerate(tokens):
-        out = folder / f"{folder.name}_{i:08d}.png"
-
-        render_text_sync(
-            text=text,
-            font_path=str(font_path),
-            output_path=str(out),
-            **params
-        )
-
-        images.append(out)
-
-    return images
+    """异步并发渲染批次图片"""
+    return await render_batch_concurrent(
+        tokens=tokens,
+        folder=folder,
+        font_path=font_path,
+        params=params,
+        max_concurrent=max_concurrent,
+    )
 
 
 @register("texttool", "BUGJI", "文本转图片", "0.3.0", "https://github.com/BUGJI/astrbot_plugin_text2image")
@@ -83,7 +76,23 @@ class TextTool(Star):
             
         self.max_chars_per_task = int(self.config.limit.get("max_chars_per_task", 20000))
         self.max_images_per_task = int(self.config.limit.get("max_images_per_task", 1000))
+        self.max_concurrent_renders = int(self.config.limit.get("max_concurrent_renders", 8))
+        if self.max_concurrent_renders <= 0:
+            logger.warning("max_concurrent_renders <= 0，自动修正为 1")
+            self.max_concurrent_renders = 1
+        self.max_concurrent_font_samples = int(self.config.limit.get("max_concurrent_font_samples", 8))
+        if self.max_concurrent_font_samples <= 0:
+            logger.warning("max_concurrent_font_samples <= 0，自动修正为 1")
+            self.max_concurrent_font_samples = 1
         self.fonts_per_page = int(self.config.limit.get("fonts_per_page", 20))
+        self.font_list_columns = int(self.config.limit.get("font_list_columns", 3))
+        # 校验 font_list_columns 范围
+        if self.font_list_columns < 1:
+            logger.warning(f"font_list_columns < 1，自动修正为 1")
+            self.font_list_columns = 1
+        elif self.font_list_columns > self.fonts_per_page:
+            logger.warning(f"font_list_columns > fonts_per_page，自动修正为 {self.fonts_per_page}")
+            self.font_list_columns = self.fonts_per_page
         self.default_font = self.config.get("default_font", "宋体2")
         
         # self.queue = asyncio.Queue(maxsize=self.max_task)
@@ -221,35 +230,63 @@ class TextTool(Star):
         if cached_count == 0:
             yield event.plain_result("⚠️ 第一次使用需要缓存大量图片，可能需要较长时间，请耐心等待...")
         
-        sample_text = "你好123Abc"
+        sample_text = "你好 123Abc"
         font_rows = []
         missing_count = 0
-        
+
         # 预先渲染每个字体的示例图（带缓存），并按 fonts_per_page 插入分页标记
         sorted_fonts = sorted(fonts.items(), key=lambda x: x[0])
         total_fonts = len(sorted_fonts)
         fonts_per_page = self.fonts_per_page
 
+        # 收集需要渲染的字体任务
+        render_tasks = []
         for idx, (font_name, font_path) in enumerate(sorted_fonts):
-            # 检查缓存
             font_img_path = font_samples_dir / f"{font_path.stem}.png"
-            
             if not font_img_path.exists():
-                logger.info(f"[DEBUG] 渲染字体示例: {font_name}")
-                # 使用同步版本直接渲染
-                try:
-                    await asyncio.get_event_loop().run_in_executor(None, lambda: render_text_sync(
-                        text=sample_text,
-                        font_path=str(font_path),
-                        output_path=str(font_img_path)
-                    ))
-                    missing_count += 1
-                except Exception as e:
-                    logger.warning(f"[WARN] 渲染字体 {font_name} 失败: {e}")
-                    continue
-            
+                render_tasks.append((idx, font_name, font_path, font_img_path))
+
+        # 并发渲染缺失的字体示例图
+        if render_tasks:
+            logger.info(f"[DEBUG] 需要渲染 {len(render_tasks)} 个字体示例图")
+            yield event.plain_result(f"正在生成 {len(render_tasks)} 个字体示例图...")
+
+            semaphore = asyncio.Semaphore(self.max_concurrent_font_samples)
+
+            async def render_font_sample(task_idx, task_font_name, task_font_path, task_font_img_path):
+                async with semaphore:
+                    try:
+                        logger.info(f"[DEBUG] 渲染字体示例：{task_font_name}")
+                        await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: render_text_sync(
+                                text=sample_text,
+                                font_path=str(task_font_path),
+                                output_path=str(task_font_img_path)
+                            )
+                        )
+                        return True
+                    except Exception as e:
+                        logger.warning(f"[WARN] 渲染字体 {task_font_name} 失败：{e}")
+                        return False
+
+            # 并发执行所有渲染任务
+            results = await asyncio.gather(*[
+                render_font_sample(tidx, tname, tpath, timgpath)
+                for tidx, tname, tpath, timgpath in render_tasks
+            ])
+            missing_count = sum(results)
+
+        # 构建 HTML 行（网格布局）
+        columns = self.font_list_columns
+        for idx, (font_name, font_path) in enumerate(sorted_fonts):
+            font_img_path = font_samples_dir / f"{font_path.stem}.png"
+
+            if not font_img_path.exists():
+                continue
+
             is_default = " (默认)" if font_name == self.default_font else ""
-            
+
             # 使用相对路径：cache_path → font_samples 是兄弟目录
             rel_path = f"../font_samples/{font_img_path.name}"
 
@@ -257,20 +294,33 @@ class TextTool(Star):
             if idx % fonts_per_page == 0:
                 page_num = idx // fonts_per_page + 1
                 font_rows.append(f'''<tr>
-                    <td colspan="1" class="page-break">页 {page_num}</td>
-                    <td colspan="2" class="page-tip" style="text-align:left">使用 texttool list <页码> 复制字体昵称</td>
+                    <td colspan="{columns}" class="page-break">页 {page_num}</td>
+                </tr>''')
+                font_rows.append(f'''<tr>
+                    <td colspan="{columns}" class="page-tip" style="text-align:left">使用 texttool list <页码> 复制字体昵称</td>
                 </tr>''')
 
-            font_rows.append(f"""<tr>
-                <td class="font-index">{idx + 1}</td>
-                <td class="font-name">{font_name}{is_default}</td>
-                <td class="font-sample"><img src="{rel_path}" height="60"></td>
-            </tr>""")
+            # 每行开始新行
+            if idx % columns == 0:
+                font_rows.append('<tr>')
+            
+            # 添加单个字体单元格
+            font_rows.append(f"""<td class=\"font-cell\">
+                <div class=\"font-index\">{idx + 1}</div>
+                <div class=\"font-name\">{font_name}{is_default}</div>
+                <div class=\"font-sample\"><img src=\"{rel_path}\" height=\"60\"></div>
+            </td>""")
+            
+            # 每行结束或最后一个字体时闭合行
+            if (idx + 1) % columns == 0 or idx == len(sorted_fonts) - 1:
+                font_rows.append('</tr>')
         
         # 页尾提示
         font_rows.append(f'''<tr>
-            <td colspan="1" class="page-break">底部</td>
-            <td colspan="2" class="page-tip" style="text-align:right">使用 texttool list <页码> 复制字体</td>
+            <td colspan="{columns}" class="page-break">底部</td>
+        </tr>''')
+        font_rows.append(f'''<tr>
+            <td colspan="{columns}" class="page-tip" style="text-align:right">使用 texttool list <页码> 复制字体</td>
         </tr>''')
 
         if missing_count > 0:
@@ -304,33 +354,39 @@ class TextTool(Star):
         html, body {{ background: #FFFFFF; padding: 20px; }}
         table {{ width: 100%; border-collapse: collapse; }}
         td {{ background: #FFFFFF; }}
+        .font-cell {{
+            text-align: center;
+            vertical-align: top;
+            padding: 8px;
+            border-right: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+            width: {100 // columns}%;
+        }}
         .font-index {{
             font-family: sans-serif;
-            font-size: 20px;
-            padding: 8px 16px;
+            font-size: 16px;
+            padding: 4px;
             text-align: center;
-            border-bottom: 1px solid #ddd;
-            width: 80px;
             color: #888;
         }}
         .font-name {{
             font-family: sans-serif;
-            font-size: 20px;
-            padding: 8px 16px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-            width: 30%;
+            font-size: 14px;
+            padding: 4px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }}
         .font-sample {{
-            font-size: 48px;
-            padding: 8px 16px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
             vertical-align: middle;
-            min-width: 200px;
         }}
         .font-sample img {{
-            display: block;
+            display: inline-block;
+            max-width: 100%;
+            height: auto;
         }}
         .page-break {{
             font-family: sans-serif;
@@ -390,7 +446,11 @@ class TextTool(Star):
             await asyncio.get_event_loop().run_in_executor(None, lambda: asyncio.run(render()))
             # 缓存生成的图片
             shutil.copy(str(img_path), str(cached_img_path))
-            yield event.image_result(str(img_path))
+            # 根据配置决定以图片还是文件形式发送
+            if self.single_image_send_by_file:
+                yield event.chain_result([CompFile(file=str(img_path), name=img_path.name)])
+            else:
+                yield event.image_result(str(img_path))
         except Exception as e:
             logger.exception(f"生成字体列表失败: {e}")
             yield event.plain_result(f"生成失败: {e}")
@@ -551,12 +611,13 @@ class TextTool(Star):
         if ext:
             params["ext"] = ext
 
-        images = await asyncio.to_thread(
-            _render_batch,
-            tokens,
-            folder,
-            font_path,
-            params,
+        # 使用异步并发渲染
+        images = await _render_batch_async(
+            tokens=tokens,
+            folder=folder,
+            font_path=font_path,
+            params=params,
+            max_concurrent=self.max_concurrent_renders,
         )
 
         zip_path: Optional[Path] = None
