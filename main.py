@@ -446,7 +446,11 @@ class TextTool(Star):
             await asyncio.get_event_loop().run_in_executor(None, lambda: asyncio.run(render()))
             # 缓存生成的图片
             shutil.copy(str(img_path), str(cached_img_path))
-            yield event.image_result(str(img_path))
+            # 根据配置决定以图片还是文件形式发送
+            if self.single_image_send_by_file:
+                yield event.chain_result([CompFile(file=str(img_path), name=img_path.name)])
+            else:
+                yield event.image_result(str(img_path))
         except Exception as e:
             logger.exception(f"生成字体列表失败: {e}")
             yield event.plain_result(f"生成失败: {e}")
