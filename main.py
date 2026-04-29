@@ -680,7 +680,14 @@ class TextTool(Star):
                 if html_path.exists():
                     html_path.unlink(missing_ok=True)
         
-        yield event.plain_result(f"正在生成第{page}页字体列表...")
+        # 检查缓存是否有效
+        if cached_img_path.exists():
+            logger.debug(f"[DEBUG] 使用缓存的 list 第{page}页图片：{cached_img_path}")
+            await self._send_menu_image(event, cached_img_path, self.list_menu_image_send_mode)
+            return
+        
+        # 发送提示消息
+        await event.send(event.plain_result(f"正在生成第{page}页字体列表..."))
         
         try:
             await asyncio.get_event_loop().run_in_executor(None, lambda: asyncio.run(render()))
@@ -688,7 +695,7 @@ class TextTool(Star):
             await self._send_menu_image(event, cached_img_path, self.list_menu_image_send_mode)
         except Exception as e:
             logger.exception(f"生成字体列表第{page}页失败：{e}")
-            yield event.plain_result(f"生成失败：{e}")
+            await event.send(event.plain_result(f"生成失败：{e}"))
         finally:
             if img_path.exists():
                 img_path.unlink(missing_ok=True)
