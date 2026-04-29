@@ -60,8 +60,11 @@ class TextTool(Star):
             self.data_path = StarTools.get_data_dir(self)
         else:
             self.data_path = Path(get_astrbot_data_path()) / "plugin_data" / self.name
-        self.menu_image_send_by_file = self.config.compatibility.get("menu_image_send_by_file", False)
         self.cache_path = self.data_path / "cache"
+        
+        # 菜单图片发送模式（拆分为 list 和 listall）
+        self.list_menu_image_send_mode = self.config.compatibility.get("list_menu_image_send_mode", "text")
+        self.listall_menu_image_send_mode = self.config.compatibility.get("listall_menu_image_send_mode", "image")
         
         self.single_image_send_by_file = self.config.compatibility.get("single_image_send_by_file", True)
         
@@ -169,8 +172,12 @@ class TextTool(Star):
         # 按 mode 分割内容
         tokens = self._split_content(content, mode)
         
-        # 计算预计时间
-        estimated_seconds = (len(tokens) * 6) / self.max_concurrent_renders  # 预计时间（秒），假设每个 token 平均渲染时间为 6 秒，除以并发线程数
+        # 计算预计时间：按照一个线程 6 秒计算，同时考虑并发线程数
+        # 如配置的线程为 4，需要执行 6 个任务，则时间为 ceil(6/4)*6 = 2*6 = 12 秒
+        import math
+        batches = math.ceil(len(tokens) / self.max_concurrent_renders)
+        estimated_seconds = batches * 6
+        
         if estimated_seconds >= 60:
             minutes = estimated_seconds // 60
             seconds = estimated_seconds % 60
@@ -341,13 +348,13 @@ class TextTool(Star):
 
         # 检查缓存是否有效
         if cached_img_path.exists():
-            logger.debug(f"[DEBUG] 使用缓存的字体列表图片: {cached_img_path} 发送模式: {self.menu_image_send_by_file}")
-            if self.menu_image_send_by_file == "image":
+            logger.debug(f"[DEBUG] 使用缓存的字体列表图片: {cached_img_path} 发送模式: {self.listall_menu_image_send_mode}")
+            if self.listall_menu_image_send_mode == "image":
                 yield event.image_result(str(cached_img_path))
-            elif self.menu_image_send_by_file == "file":
+            elif self.listall_menu_image_send_mode == "file":
                 # yield event.plain_result("正在发送字体列表图片（文件方式）...")
                 await event.send(event.chain_result([CompFile(file=str(cached_img_path), name="font_list.png")]))
-            elif self.menu_image_send_by_file == "zipfile":
+            elif self.listall_menu_image_send_mode == "zipfile":
                 # yield event.plain_result("正在发送字体列表图片（压缩包方式）...")
                 zip_path = self.cache_path / f"font_lists.zip"
                 with zipfile.ZipFile(zip_path, 'w') as zf:
@@ -459,12 +466,12 @@ class TextTool(Star):
             await asyncio.get_event_loop().run_in_executor(None, lambda: asyncio.run(render()))
             # 缓存生成的图片
             shutil.copy(str(img_path), str(cached_img_path))
-            if self.menu_image_send_by_file == "image":
+            if self.listall_menu_image_send_mode == "image":
                 yield event.image_result(str(cached_img_path))
-            elif self.menu_image_send_by_file == "file":
+            elif self.listall_menu_image_send_mode == "file":
                 # yield event.plain_result("正在发送字体列表图片（文件方式）...")
                 await event.send(event.chain_result([CompFile(file=str(cached_img_path), name="font_list.png")]))
-            elif self.menu_image_send_by_file == "zipfile":
+            elif self.listall_menu_image_send_mode == "zipfile":
                 # yield event.plain_result("正在发送字体列表图片（压缩包方式）...")
                 zip_path = self.cache_path / f"font_lists.zip"
                 with zipfile.ZipFile(zip_path, 'w') as zf:
@@ -477,6 +484,226 @@ class TextTool(Star):
         finally:
             if img_path.exists():
                 img_path.unlink(missing_ok=True)
+
+
+    async def _render_and_send_list_page(self, event, page, sorted_fonts, total_pages):
+        """渲染 list 命令的某一页为图片并发送（带缓存）"""
+        font_samples_dir = self.data_path / "font_samples"
+        font_samples_dir.mkdir(parents=True, exist_ok=True)
+        
+        sample_text = "你好 123Abc"
+        start_idx = (page - 1) * self.fonts_per_page
+        end_idx = min(start_idx + self.fonts_per_page, len(sorted_fonts))
+        page_fonts = sorted_fonts[start_idx:end_idx]
+        
+        # 收集需要渲染的字体任务（仅当前页）
+        render_tasks = []
+        for idx, (font_name, font_path) in enumerate(page_fonts):
+            global_idx = start_idx + idx
+            font_img_path = font_samples_dir / f"{font_path.stem}.png"
+            if not font_img_path.exists():
+                render_tasks.append((global_idx, font_name, font_path, font_img_path))
+        
+        # 并发渲染缺失的字体示例图
+        if render_tasks:
+            logger.debug(f"[DEBUG] list 命令需要渲染 {len(render_tasks)} 个字体示例图")
+            semaphore = asyncio.Semaphore(self.max_concurrent_font_samples)
+            
+            async def render_font_sample(task_global_idx, task_font_name, task_font_path, task_font_img_path):
+                async with semaphore:
+                    try:
+                        logger.debug(f"[DEBUG] 渲染字体示例：{task_font_name}")
+                        await asyncio.get_event_loop().run_in_executor(
+                            None,
+                            lambda: render_text_sync(
+                                text=sample_text,
+                                font_path=str(task_font_path),
+                                output_path=str(task_font_img_path)
+                            )
+                        )
+                        return True
+                    except Exception as e:
+                        logger.warning(f"[WARN] 渲染字体 {task_font_name} 失败：{e}")
+                        return False
+            
+            await asyncio.gather(*[
+                render_font_sample(tidx, tname, tpath, timgpath)
+                for tidx, tname, tpath, timgpath in render_tasks
+            ])
+        
+        # 构建 HTML 行（网格布局）
+        columns = self.font_list_columns
+        font_rows = []
+        
+        for idx, (font_name, font_path) in enumerate(page_fonts):
+            global_idx = start_idx + idx
+            font_img_path = font_samples_dir / f"{font_path.stem}.png"
+            
+            if not font_img_path.exists():
+                continue
+            
+            is_default = " (默认)" if font_name == self.default_font else ""
+            rel_path = f"../font_samples/{font_img_path.name}"
+            
+            # 每行开始新行
+            if idx % columns == 0:
+                font_rows.append('<tr>')
+            
+            # 添加单个字体单元格（保留字体编号、昵称、预览图）
+            font_rows.append(f"""<td class=\"font-cell\">
+                <div class=\"font-index\">{global_idx + 1}</div>
+                <div class=\"font-name\">{font_name}{is_default}</div>
+                <div class=\"font-sample\"><img src=\"{rel_path}\" height=\"60\"></div>
+            </td>""")
+            
+            # 每行结束或最后一个字体时闭合行
+            if (idx + 1) % columns == 0 or idx == len(page_fonts) - 1:
+                font_rows.append('</tr>')
+        
+        # 页眉和页尾提示
+        font_rows.insert(0, f'''<tr>
+            <td colspan="{columns}" class="page-break">页 {page}/{total_pages}</td>
+        </tr>''')
+        font_rows.append(f'''<tr>
+            <td colspan="{columns}" class="page-tip" style="text-align:center">使用 texttool list <页码> 复制字体</td>
+        </tr>''')
+        
+        # 计算缓存指纹（基于当前页字体）
+        cache_key_parts = [str(page), str(total_pages), str(self.fonts_per_page), self.default_font]
+        for font_name, font_path in page_fonts:
+            font_img_path = font_samples_dir / f"{font_path.stem}.png"
+            font_mtime = font_path.stat().st_mtime
+            sample_mtime = font_img_path.stat().st_mtime if font_img_path.exists() else 0
+            cache_key_parts.append(f"{font_name}:{font_mtime}:{sample_mtime}")
+        
+        cache_key = hashlib.md5("".join(cache_key_parts).encode()).hexdigest()
+        cached_img_path = self.cache_path / f"fontlist_page_{page}_cached_{cache_key}.png"
+        
+        # 检查缓存是否有效
+        if cached_img_path.exists():
+            logger.debug(f"[DEBUG] 使用缓存的 list 第{page}页图片：{cached_img_path}")
+            await self._send_menu_image(event, cached_img_path, self.list_menu_image_send_mode)
+            return
+        
+        # 构建 HTML
+        html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        html, body {{ background: #FFFFFF; padding: 20px; }}
+        table {{ width: 100%; border-collapse: collapse; }}
+        td {{ background: #FFFFFF; }}
+        .font-cell {{
+            text-align: center;
+            vertical-align: top;
+            padding: 8px;
+            border-right: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+            width: {100 // columns}%;
+        }}
+        .font-index {{
+            font-family: sans-serif;
+            font-size: 16px;
+            padding: 4px;
+            text-align: center;
+            color: #888;
+        }}
+        .font-name {{
+            font-family: sans-serif;
+            font-size: 14px;
+            padding: 4px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }}
+        .font-sample {{
+            padding: 8px;
+            text-align: center;
+            vertical-align: middle;
+        }}
+        .font-sample img {{
+            display: inline-block;
+            max-width: 100%;
+            height: auto;
+        }}
+        .page-break {{
+            font-family: sans-serif;
+            font-size: 20px;
+            text-align: left;
+            padding: 12px;
+            font-weight: bold;
+            color: #0066cc;
+        }}
+        .page-tip {{
+            font-family: sans-serif;
+            font-size: 14px;
+            text-align: center;
+            padding: 15px;
+            color: #666;
+        }}
+        h1 {{
+            font-family: sans-serif;
+            font-size: 32px;
+            margin-bottom: 20px;
+            text-align: center;
+        }}
+    </style>
+</head>
+<body>
+    <h1>可用字体列表 - 第{page}页 ({len(page_fonts)}种)</h1>
+    <table>
+        {"".join(font_rows)}
+    </table>
+</body>
+</html>"""
+        
+        # 生成图片
+        uid = hashlib.sha256(str(event.get_sender_id()).encode()).hexdigest()[:8]
+        ts = int(time.time() * 1000)
+        img_path = self.cache_path / f"fontlist_page_{page}_{uid}_{ts}.png"
+        
+        from playwright.async_api import async_playwright
+        
+        async def render():
+            async with async_playwright() as p:
+                browser = await p.chromium.launch()
+                page_obj = await browser.new_page(viewport={"width": 1200, "height": 800})
+                html_path = self.cache_path / f"fontlist_page_{page}_{uid}_{ts}.html"
+                html_path.write_text(html_content, encoding="utf-8")
+                await page_obj.goto(f"file://{html_path.absolute()}")
+                await page_obj.wait_for_timeout(1000)
+                await page_obj.screenshot(path=str(img_path), full_page=True, omit_background=False)
+                await browser.close()
+                if html_path.exists():
+                    html_path.unlink(missing_ok=True)
+        
+        yield event.plain_result(f"正在生成第{page}页字体列表...")
+        
+        try:
+            await asyncio.get_event_loop().run_in_executor(None, lambda: asyncio.run(render()))
+            shutil.copy(str(img_path), str(cached_img_path))
+            await self._send_menu_image(event, cached_img_path, self.list_menu_image_send_mode)
+        except Exception as e:
+            logger.exception(f"生成字体列表第{page}页失败：{e}")
+            yield event.plain_result(f"生成失败：{e}")
+        finally:
+            if img_path.exists():
+                img_path.unlink(missing_ok=True)
+
+    async def _send_menu_image(self, event, img_path, send_mode):
+        """根据发送模式发送菜单图片"""
+        if send_mode == "image":
+            yield event.image_result(str(img_path))
+        elif send_mode == "file":
+            await event.send(event.chain_result([CompFile(file=str(img_path), name="font_list.png")]))
+        elif send_mode == "zipfile":
+            zip_path = self.cache_path / f"font_lists.zip"
+            with zipfile.ZipFile(zip_path, 'w') as zf:
+                zf.write(img_path, arcname="font_list.png")
+            await event.send(event.chain_result([CompFile(file=str(zip_path), name="font_list.zip")]))
 
     @texttool.command("list")
     async def list_fonts(self, event: AstrMessageEvent):
@@ -507,6 +734,12 @@ class TextTool(Star):
         
         if page > total_pages:
             yield event.plain_result(f"页码超出范围，总共 {total_pages} 页")
+            return
+        
+        # 检查发送模式，如果不为 text，则渲染为图片
+        if self.list_menu_image_send_mode != "text":
+            # 渲染当前页为图片（带缓存）
+            await self._render_and_send_list_page(event, page, sorted_fonts, total_pages)
             return
         
         start_idx = (page - 1) * self.fonts_per_page
@@ -588,20 +821,6 @@ class TextTool(Star):
         if len(tokens) > self.max_images_per_task:
             yield event.plain_result(f"图片数量过多，最大支持 {self.max_images_per_task}")
             return
-
-        # 直接处理，移除队列
-        estimated_seconds = (len(tokens) * 6) / self.max_concurrent_renders  # 预计时间（秒）
-        if estimated_seconds >= 60:
-            minutes = estimated_seconds // 60
-            seconds = estimated_seconds % 60
-            if seconds > 0:
-                time_text = f"{minutes} 分钟 {seconds} 秒"
-            else:
-                time_text = f"{minutes} 分钟"
-        else:
-            time_text = f"{estimated_seconds} 秒"
-        yield event.plain_result(f"正在生成中... 预计还需 {time_text}" + 
-                                 f" (已使用{self.max_concurrent_renders}线程渲染)" if self.max_concurrent_renders > 1 else "")
         
         # 提取扩展参数
         ext = params.pop("ext", None)

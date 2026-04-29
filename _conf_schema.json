@@ -58,8 +58,14 @@
         "type": "bool",
         "default": false
       },
-      "menu_image_send_by_file": {
-        "description": "菜单图片发送模式",
+      "list_menu_image_send_mode": {
+        "description": "list 命令菜单图片发送模式",
+        "type": "string",
+        "options": ["text", "image", "file", "zipfile"],
+        "default": "text"
+      },
+      "listall_menu_image_send_mode": {
+        "description": "listall 命令菜单图片发送模式",
         "type": "string",
         "options": ["image", "file", "zipfile"],
         "default": "image"
