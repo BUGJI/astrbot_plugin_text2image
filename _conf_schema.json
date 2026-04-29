@@ -94,6 +94,12 @@
         "type": "string",
         "hint": "当用户在黑名单群使用 text2image 功能时的提示语",
         "default": "当前群暂不支持此功能。"
+      },
+      "sample_text": {
+        "description": "字体示例文本",
+        "type": "string",
+        "hint": "用于渲染字体示例的文本内容，建议包含多种类型字符以展示字体效果，如中文、英文、数字等",
+        "default": "你好 123Abc"
       }
     }
   }
