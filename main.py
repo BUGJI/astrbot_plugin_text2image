@@ -696,7 +696,7 @@ class TextTool(Star):
     async def _send_menu_image(self, event, img_path, send_mode):
         """根据发送模式发送菜单图片"""
         if send_mode == "image":
-            yield event.image_result(str(img_path))
+            await event.send(event.chain_result([CompImage(file=str(img_path))]))
         elif send_mode == "file":
             await event.send(event.chain_result([CompFile(file=str(img_path), name="font_list.png")]))
         elif send_mode == "zipfile":
