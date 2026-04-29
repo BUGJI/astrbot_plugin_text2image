@@ -70,6 +70,12 @@
         "options": ["image", "file", "zipfile"],
         "default": "image"
       },
+      "cache_update_mode": {
+        "description": "缓存更新模式",
+        "hint": "list 命令缓存更新目标页码，填 all 更新所有页，填数字更新指定页；font 命令更新目标字体编号，填 all 更新所有字体",
+        "type": "string",
+        "default": "all"
+      },
       "blacklist": {
         "description": "黑名单群号列表",
         "type": "list",
