@@ -71,6 +71,7 @@ class TextTool(Star):
         self.blacklist = self.config.compatibility.get("blacklist", [])
         self.blacklist = {str(gid) for gid in self.blacklist}
         self.blacklist_notice = self.config.compatibility.get("blacklist_notice", "当前群暂不支持此功能。")
+        self.allow_get_font = self.config.compatibility.get("allow_get_font", False)
         
         self.max_task = int(self.config.limit.get("max_task", 4))
         if self.max_task <= 0:
@@ -202,6 +203,7 @@ class TextTool(Star):
                                 "texttool pm - 基本参数帮助\n"
                                 "texttool listall - 查看所有可用字体\n"
                                 "texttool list [页码] - 分页查看可用字体列表\n"
+                                "texttool get [字体 ID] - 获取字体源文件（需要管理员开启允许）\n"
                                 "texttool task - 查看当前任务队列状态")
 
     @texttool.command("pm")
@@ -791,6 +793,50 @@ class TextTool(Star):
         msg_lines.append("  texttool listall - 查看完整列表")
         
         yield event.plain_result("\n".join(msg_lines))
+
+    @texttool.command("get")
+    async def get_font(self, event: AstrMessageEvent):
+        """获取字体源文件"""
+        # 检查是否允许获取字体
+        if not self.allow_get_font:
+            yield event.plain_result("管理员未开启获取字体功能，无法执行此操作。")
+            return
+        
+        raw = event.message_str.strip()
+        prefix = "texttool get"
+        if raw.startswith(prefix):
+            raw = raw[len(prefix):].strip()
+        
+        if not raw:
+            yield event.plain_result("请提供字体 ID，使用方式：texttool get [字体 ID]")
+            return
+        
+        try:
+            font_id = int(raw)
+        except ValueError:
+            yield event.plain_result("字体 ID 必须是数字，使用方式：texttool get [字体 ID]")
+            return
+        
+        fonts = self._scan_fonts()
+        if not fonts:
+            yield event.plain_result("未找到任何字体文件")
+            return
+        
+        sorted_fonts = sorted(fonts.items())
+        total_fonts = len(sorted_fonts)
+        
+        if font_id < 1 or font_id > total_fonts:
+            yield event.plain_result(f"字体 ID 超出范围 (1-{total_fonts})，请使用 texttool list 查看可用字体")
+            return
+        
+        font_name, font_path = sorted_fonts[font_id - 1]
+        
+        if not font_path.exists():
+            yield event.plain_result(f"字体文件不存在：{font_path}")
+            return
+        
+        # 发送字体文件
+        yield event.chain_result([CompFile(file=str(font_path), name=font_path.name)])
 
     @texttool.command("updatecache")
     async def updatecache(self, event: AstrMessageEvent):

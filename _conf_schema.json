@@ -88,6 +88,12 @@
         "type": "string",
         "hint": "当用户在黑名单群使用 text2image 功能时的提示语",
         "default": "当前群暂不支持此功能。"
+      },
+      "allow_get_font": {
+        "description": "允许获取字体源文件",
+        "type": "bool",
+        "hint": "是否允许用户使用 texttool get 命令获取字体源文件",
+        "default": false
       }
     }
   }
