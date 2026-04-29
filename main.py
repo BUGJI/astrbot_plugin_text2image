@@ -98,6 +98,7 @@ class TextTool(Star):
             logger.warning(f"font_list_columns > fonts_per_page，自动修正为 {self.fonts_per_page}")
             self.font_list_columns = self.fonts_per_page
         self.default_font = self.config.get("default_font", "宋体2")
+        self.sample_text = self.config.compatibility.get("sample_text", "你好 123Abc")
         
         # self.queue = asyncio.Queue(maxsize=self.max_task)
         # logger.info(f"启动  个 worker，队列上限 {self.max_task}")
@@ -240,7 +241,7 @@ class TextTool(Star):
         if cached_count == 0:
             yield event.plain_result("⚠️ 第一次使用需要缓存大量图片，可能需要较长时间，请耐心等待...")
         
-        sample_text = "你好 123Abc"
+        sample_text = self.sample_text
         font_rows = []
         missing_count = 0
 
@@ -459,7 +460,7 @@ class TextTool(Star):
                 html_path.write_text(html_content, encoding="utf-8")
                 await page.goto(f"file://{html_path.absolute()}")
                 await page.wait_for_timeout(1000)
-                await page.screenshot(path=str(img_path), full_page=True, omit_background=False)
+                await page.screenshot(path=str(img_path), full_page=True, omit_background=False, timeout=300000)
                 await browser.close()
                 # 清理 HTML 文件
                 if html_path.exists():
