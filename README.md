@@ -33,9 +33,11 @@ astrbot_plugin_text2image/
 |------|------|
 | `texttool help` | 显示帮助信息 |
 | `texttool pm` | 参数说明 |
+| `texttool get` | 下载字体源文件（可通过配置控制是否允许） |
 | `texttool list` | 分页查看可用字体列表 |
 | `texttool listall` | 查看所有可用字体（图片形式） |
 | `texttool generate <参数> <文本>` | 生成图片 |
+
 
 ### 生成图片
 
