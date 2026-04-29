@@ -462,16 +462,19 @@ class TextTool(Star):
             page = await self._browser_pool.get_page()
             try:
                 # 设置适合列表页面的 viewport
-                await page.set_viewport_size({"width": 1200, "height": 800})
+                await page.set_viewport_size({"width": 1920, "height": 1080})
                 # 先把 HTML 保存为文件，用相对路径引用图片
                 html_path = self.cache_path / f"fontlist_{uid}_{ts}.html"
                 html_path.write_text(html_content, encoding="utf-8")
-                await page.goto(f"file://{html_path.absolute()}")
+                await page.goto(f"file://{html_path.absolute()}", wait_until="domcontentloaded", timeout=60000)
                 await page.wait_for_timeout(1000)
                 await page.screenshot(path=str(img_path), full_page=True, omit_background=False, timeout=300000)
                 # 清理 HTML 文件
                 if html_path.exists():
                     html_path.unlink(missing_ok=True)
+            except Exception as e:
+                logger.error(f"[listall] 渲染字体列表失败：{e}")
+                raise
             finally:
                 await self._browser_pool.release_page(page)
         
@@ -691,14 +694,17 @@ class TextTool(Star):
             page_obj = await self._browser_pool.get_page()
             try:
                 # 设置适合列表页面的 viewport
-                await page_obj.set_viewport_size({"width": 1200, "height": 800})
+                await page_obj.set_viewport_size({"width": 1920, "height": 1080})
                 html_path = self.cache_path / f"fontlist_page_{page}_{uid}_{ts}.html"
                 html_path.write_text(html_content, encoding="utf-8")
-                await page_obj.goto(f"file://{html_path.absolute()}")
+                await page_obj.goto(f"file://{html_path.absolute()}", wait_until="domcontentloaded", timeout=60000)
                 await page_obj.wait_for_timeout(1000)
-                await page_obj.screenshot(path=str(img_path), full_page=True, omit_background=False)
+                await page_obj.screenshot(path=str(img_path), full_page=True, omit_background=False, timeout=300000)
                 if html_path.exists():
                     html_path.unlink(missing_ok=True)
+            except Exception as e:
+                logger.error(f"[list] 渲染字体列表第{page}页失败：{e}")
+                raise
             finally:
                 await self._browser_pool.release_page(page_obj)
         

@@ -42,9 +42,14 @@ class BrowserPool:
         """获取一个页面实例"""
         if self._browser is None:
             raise RuntimeError("BrowserPool not initialized. Call initialize() first.")
-        async with self._semaphore:
-            page = await self._browser.new_page(viewport={'width': 1, 'height': 1})
+        await self._semaphore.acquire()
+        try:
+            page = await self._browser.new_page(viewport={'width': 1920, 'height': 1080})
             return page
+        except Exception as e:
+            self._semaphore.release()
+            logger.error(f"[BrowserPool] 创建页面失败：{e}")
+            raise
     
     async def release_page(self, page: Page):
         """释放页面实例"""
@@ -52,6 +57,8 @@ class BrowserPool:
             await page.close()
         except Exception as e:
             logger.warning(f"[BrowserPool] 关闭页面失败：{e}")
+        finally:
+            self._semaphore.release()
     
     async def close(self):
         """关闭浏览器池"""
@@ -190,18 +197,21 @@ async def render_single_image(
     if browser_pool:
         page = await browser_pool.get_page()
         try:
-            await page.set_content(html_content)
+            await page.set_content(html_content, wait_until="domcontentloaded", timeout=60000)
             await page.wait_for_timeout(500)
             await page.screenshot(path=str(output_path), full_page=True, omit_background=True)
+        except Exception as e:
+            logger.error(f"[render_single_image] 渲染失败：{e}")
+            raise
         finally:
             await browser_pool.release_page(page)
     else:
         # 兼容模式：每次创建新浏览器（不推荐，性能差）
         async with async_playwright() as p:
             browser = await p.chromium.launch()
-            page = await browser.new_page(viewport={'width': 1, 'height': 1})
+            page = await browser.new_page(viewport={'width': 1920, 'height': 1080})
             
-            await page.set_content(html_content)
+            await page.set_content(html_content, wait_until="domcontentloaded", timeout=60000)
             await page.wait_for_timeout(500)
             
             await page.screenshot(path=str(output_path), full_page=True, omit_background=True)
