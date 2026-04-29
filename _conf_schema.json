@@ -12,26 +12,30 @@
       "max_images_per_task": {
         "description": "单次任务最大图片数",
         "type": "int",
+        "hint": "控制单次 text2image 命令可渲染的最大图片数量，超过后将拒绝执行",
         "default": 1000
       },
       "max_chars_per_task": {
         "description": "单次任务最大字符数",
         "type": "int",
+        "hint": "控制单次 text2image 命令可渲染的最大字符数量，超过后将拒绝执行",
         "default": 20000
       },
       "max_task": {
         "description": "队列最大任务数",
         "type": "int",
+        "hint": "控制排队等待的任务数量上限，超过后新任务将被拒绝",
         "default": 4
       },
       "fonts_per_page": {
         "description": "每页显示字体数量",
         "type": "int",
+        "hint": "控制 texttool list/listall 每页显示多少个字体预览，小于 1 设为 1",
         "default": 20
       },
       "font_list_columns": {
         "description": "字体列表每行显示的字体数量",
-        "hint": "控制 texttool listall 每行显示多少个字体预览，小于 1 设为 1，大于每页数量则设为每页数量",
+        "hint": "控制 texttool list/listall 每行显示多少个字体预览，小于 1 设为 1，大于每页数量则设为每页数量",
         "type": "int",
         "default": 3
       },
@@ -56,28 +60,33 @@
       "single_image_send_by_file": {
         "description": "单图以文件方式发送",
         "type": "bool",
+        "hint": "是否将单图以文件形式发送，开启后可以避免部分平台对图片的压缩",
         "default": false
       },
       "list_menu_image_send_mode": {
         "description": "list 命令菜单图片发送模式",
         "type": "string",
         "options": ["text", "image", "file", "zipfile"],
+        "hint": "控制 texttool list 命令菜单中字体示例的发送方式（部分群文件权限不足可修改此项）",
         "default": "text"
       },
       "listall_menu_image_send_mode": {
         "description": "listall 命令菜单图片发送模式",
         "type": "string",
         "options": ["image", "file", "zipfile"],
+        "hint": "控制 texttool listall 命令菜单中字体示例的发送方式（部分群文件权限不足可修改此项）",
         "default": "image"
       },
       "blacklist": {
         "description": "黑名单群号列表",
         "type": "list",
+        "hint": "填入不允许使用 text2image 功能的群号，多个群号用逗号分隔，对于不支持的群可以避免触发",
         "default": []
       },
       "blacklist_notice": {
         "description": "黑名单提示",
         "type": "string",
+        "hint": "当用户在黑名单群使用 text2image 功能时的提示语",
         "default": "当前群暂不支持此功能。"
       }
     }
