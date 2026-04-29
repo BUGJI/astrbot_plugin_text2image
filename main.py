@@ -16,7 +16,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from astrbot.api.star import StarTools
 
 
-from .text_renderer import render_text_sync, render_batch_concurrent
+from .text_renderer import render_text_sync, render_batch_concurrent, BrowserPool, render_single_image
 
 
 async def _render_batch_async(
@@ -25,6 +25,7 @@ async def _render_batch_async(
     font_path: Path,
     params: Dict[str, Any],
     max_concurrent: int = 8,
+    browser_pool: Optional[BrowserPool] = None,
 ) -> List[Path]:
     """异步并发渲染批次图片"""
     return await render_batch_concurrent(
@@ -33,6 +34,7 @@ async def _render_batch_async(
         font_path=font_path,
         params=params,
         max_concurrent=max_concurrent,
+        browser_pool=browser_pool,
     )
 
 
@@ -100,6 +102,8 @@ class TextTool(Star):
         self.default_font = self.config.get("default_font", "宋体2")
         self.sample_text = self.config.compatibility.get("sample_text", "你好 123Abc")
         
+        # 浏览器池实例（延迟初始化）
+        self._browser_pool: Optional[BrowserPool] = None
         # self.queue = asyncio.Queue(maxsize=self.max_task)
         # logger.info(f"启动  个 worker，队列上限 {self.max_task}")
 
@@ -109,6 +113,9 @@ class TextTool(Star):
         self.fonts_dir.mkdir(exist_ok=True)
 
         logger.info("Text2Image 插件已初始化")
+        # 初始化浏览器池
+        self._browser_pool = BrowserPool()
+        await self._browser_pool.initialize(max_concurrent=self.max_concurrent_renders)
 
     # =======================
     # 指令系统
@@ -268,13 +275,12 @@ class TextTool(Star):
                 async with semaphore:
                     try:
                         logger.debug(f"[DEBUG] 渲染字体示例：{task_font_name}")
-                        await asyncio.get_event_loop().run_in_executor(
-                            None,
-                            lambda: render_text_sync(
-                                text=sample_text,
-                                font_path=str(task_font_path),
-                                output_path=str(task_font_img_path)
-                            )
+                        # 使用异步渲染函数，直接使用浏览器池
+                        await render_single_image(
+                            text=sample_text,
+                            font_path=str(task_font_path),
+                            output_path=str(task_font_img_path),
+                            browser_pool=self._browser_pool,
                         )
                         return True
                     except Exception as e:
@@ -449,27 +455,30 @@ class TextTool(Star):
         ts = int(time.time() * 1000)
         img_path = self.cache_path / f"fontlist_{uid}_{ts}.png"
         
-        from playwright.async_api import async_playwright
-        
         async def render():
-            async with async_playwright() as p:
-                browser = await p.chromium.launch()
-                page = await browser.new_page(viewport={"width": 1200, "height": 800})
+            # 使用浏览器池渲染 HTML 页面
+            if self._browser_pool is None:
+                raise RuntimeError("BrowserPool not initialized")
+            page = await self._browser_pool.get_page()
+            try:
+                # 设置适合列表页面的 viewport
+                await page.set_viewport_size({"width": 1200, "height": 800})
                 # 先把 HTML 保存为文件，用相对路径引用图片
                 html_path = self.cache_path / f"fontlist_{uid}_{ts}.html"
                 html_path.write_text(html_content, encoding="utf-8")
                 await page.goto(f"file://{html_path.absolute()}")
                 await page.wait_for_timeout(1000)
                 await page.screenshot(path=str(img_path), full_page=True, omit_background=False, timeout=300000)
-                await browser.close()
                 # 清理 HTML 文件
                 if html_path.exists():
                     html_path.unlink(missing_ok=True)
+            finally:
+                await self._browser_pool.release_page(page)
         
         yield event.plain_result("正在生成字体列表...")
         
         try:
-            await asyncio.get_event_loop().run_in_executor(None, lambda: asyncio.run(render()))
+            await render()
             # 缓存生成的图片
             shutil.copy(str(img_path), str(cached_img_path))
             if self.listall_menu_image_send_mode == "image":
@@ -519,13 +528,12 @@ class TextTool(Star):
                 async with semaphore:
                     try:
                         logger.debug(f"[DEBUG] 渲染字体示例：{task_font_name}")
-                        await asyncio.get_event_loop().run_in_executor(
-                            None,
-                            lambda: render_text_sync(
-                                text=sample_text,
-                                font_path=str(task_font_path),
-                                output_path=str(task_font_img_path)
-                            )
+                        # 使用异步渲染函数，直接使用浏览器池
+                        await render_single_image(
+                            text=sample_text,
+                            font_path=str(task_font_path),
+                            output_path=str(task_font_img_path),
+                            browser_pool=self._browser_pool,
                         )
                         return True
                     except Exception as e:
@@ -676,20 +684,23 @@ class TextTool(Star):
         ts = int(time.time() * 1000)
         img_path = self.cache_path / f"fontlist_page_{page}_{uid}_{ts}.png"
         
-        from playwright.async_api import async_playwright
-        
         async def render():
-            async with async_playwright() as p:
-                browser = await p.chromium.launch()
-                page_obj = await browser.new_page(viewport={"width": 1200, "height": 800})
+            # 使用浏览器池渲染 HTML 页面
+            if self._browser_pool is None:
+                raise RuntimeError("BrowserPool not initialized")
+            page_obj = await self._browser_pool.get_page()
+            try:
+                # 设置适合列表页面的 viewport
+                await page_obj.set_viewport_size({"width": 1200, "height": 800})
                 html_path = self.cache_path / f"fontlist_page_{page}_{uid}_{ts}.html"
                 html_path.write_text(html_content, encoding="utf-8")
                 await page_obj.goto(f"file://{html_path.absolute()}")
                 await page_obj.wait_for_timeout(1000)
                 await page_obj.screenshot(path=str(img_path), full_page=True, omit_background=False)
-                await browser.close()
                 if html_path.exists():
                     html_path.unlink(missing_ok=True)
+            finally:
+                await self._browser_pool.release_page(page_obj)
         
         # 检查缓存是否有效
         if cached_img_path.exists():
@@ -701,7 +712,7 @@ class TextTool(Star):
         await event.send(event.plain_result(f"正在生成第{page}页字体列表..."))
         
         try:
-            await asyncio.get_event_loop().run_in_executor(None, lambda: asyncio.run(render()))
+            await render()
             shutil.copy(str(img_path), str(cached_img_path))
             await self._send_menu_image(event, cached_img_path, self.list_menu_image_send_mode)
         except Exception as e:
@@ -1032,13 +1043,14 @@ class TextTool(Star):
         if ext:
             params["ext"] = ext
 
-        # 使用异步并发渲染
+        # 使用异步并发渲染（使用浏览器池）
         images = await _render_batch_async(
             tokens=tokens,
             folder=folder,
             font_path=font_path,
             params=params,
             max_concurrent=self.max_concurrent_renders,
+            browser_pool=self._browser_pool,
         )
 
         zip_path: Optional[Path] = None
