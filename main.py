@@ -71,7 +71,7 @@ class TextTool(Star):
         self.blacklist = self.config.compatibility.get("blacklist", [])
         self.blacklist = {str(gid) for gid in self.blacklist}
         self.blacklist_notice = self.config.compatibility.get("blacklist_notice", "当前群暂不支持此功能。")
-        self.allow_get_font = self.config.compatibility.get("allow_get_font", False)
+        self.allow_get_font = self.config.limit.get("allow_get_font", False)
         
         self.max_task = int(self.config.limit.get("max_task", 4))
         if self.max_task <= 0:
