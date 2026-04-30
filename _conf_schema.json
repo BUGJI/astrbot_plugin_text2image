@@ -102,5 +102,19 @@
         "default": "你好 123Abc"
       }
     }
+  },
+  "debug": {
+    "description": "调试设置",
+    "hint": "调试相关设置，不建议修改，但是你能看见这条就除外",
+    "invisible": true,
+    "type": "object",
+    "items": {
+      "dont_cache_images": {
+        "description": "不缓存图片",
+        "type": "bool",
+        "hint": "是否缓存生成的图片，开启后可以快速进行调试，但会增加重复渲染的资源占用",
+        "default": false
+      }
+    }
   }
 }
