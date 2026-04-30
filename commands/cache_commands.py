@@ -38,8 +38,8 @@ class CacheCommands:
         
         if cmd_type == "all":
             yield event.plain_result("正在更新所有缓存，可能需要较长时间...")
-            await self.plugin.cache_manager.clear_list_cache(all_pages=True)
-            await self.plugin.cache_manager.clear_font_samples_cache()
+            self.plugin.cache_manager.clear_list_cache(all_pages=True)
+            self.plugin.cache_manager.clear_font_samples_cache()
             yield event.plain_result("所有缓存已清除，下次使用时会自动重新生成")
             return
         
@@ -60,7 +60,7 @@ class CacheCommands:
             
             if page_arg == "all":
                 yield event.plain_result(f"正在清除 list 命令的所有 {total_pages} 页缓存...")
-                await self.plugin.cache_manager.clear_list_cache(all_pages=True)
+                self.plugin.cache_manager.clear_list_cache(all_pages=True)
                 yield event.plain_result(f"list 命令所有页缓存已清除，共 {total_pages} 页")
             else:
                 try:
@@ -69,7 +69,7 @@ class CacheCommands:
                         yield event.plain_result(f"页码超出范围 (1-{total_pages})")
                         return
                     yield event.plain_result(f"正在清除 list 命令第 {page_num} 页缓存...")
-                    await self.plugin.cache_manager.clear_list_cache(page=page_num)
+                    self.plugin.cache_manager.clear_list_cache(page=page_num)
                     yield event.plain_result(f"list 命令第 {page_num} 页缓存已清除")
                 except ValueError:
                     yield event.plain_result("页码必须是数字或 all")
@@ -94,7 +94,7 @@ class CacheCommands:
             
             if font_arg == "all":
                 yield event.plain_result(f"正在清除所有 {len(sorted_fonts)} 个字体示例缓存...")
-                await self.plugin.cache_manager.clear_font_samples_cache()
+                self.plugin.cache_manager.clear_font_samples_cache()
                 yield event.plain_result(f"所有字体示例缓存已清除，共 {len(sorted_fonts)} 个字体")
             else:
                 try:

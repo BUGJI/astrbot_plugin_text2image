@@ -179,11 +179,13 @@ class HTMLBuilder:
             vertical-align: middle;
             width: 100%;
             overflow: hidden;
+            height: 120px;
         }}
         .font-sample img {{
             display: inline-block;
-            width: 100%;
-            max-width: 180px;
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
             height: auto;
             object-fit: contain;
         }}
