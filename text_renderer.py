@@ -57,7 +57,7 @@ async def render_single_image(
                 }.get(ext_suffix, "font/ttf")
                 
                 font_src = f"url('data:{mime_type};base64,{font_data}')"
-                logger.info(f"[DEBUG] 字体 {font_name} 已转为 base64 嵌入")
+                logger.debug(f"字体 {font_name} 已转为 base64 嵌入")
             except Exception as e:
                 logger.warning(f"[WARN] 字体文件读取失败：{font_file_path}, 错误：{e}")
                 font_src = "local('sans-serif')"
@@ -65,7 +65,7 @@ async def render_single_image(
             logger.warning(f"[WARN] 字体文件不存在：{font_path}")
             font_src = "local('sans-serif')"
     
-    logger.info(f"[DEBUG] 原始 css 参数：{css}")
+    logger.debug(f"原始 css 参数：{css}")
     
     # 解析用户 CSS
     user_css = ""
@@ -80,11 +80,11 @@ async def render_single_image(
             if not value:
                 continue
             props.append(f"{part} !important;")
-            logger.info(f"[DEBUG] 添加 CSS 属性：{part} !important;")
+            logger.debug(f"添加 CSS 属性：{part} !important;")
         
         if props:
             user_css = ".text { " + " ".join(props) + " }"
-            logger.info(f"[DEBUG] 生成的 user_css: {user_css}")
+            logger.debug(f"生成的 user_css: {user_css}")
     
     # 构建 HTML
     html_content = f"""<!DOCTYPE html>
