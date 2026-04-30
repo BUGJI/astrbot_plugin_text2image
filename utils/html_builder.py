@@ -19,7 +19,8 @@ class HTMLBuilder:
         default_font: str,
         page: int = None,
         total_pages: int = None,
-        is_listall: bool = False
+        is_listall: bool = False,
+        font_samples_dir: Path = None
     ) -> str:
         """
         构建字体列表 HTML
@@ -34,16 +35,18 @@ class HTMLBuilder:
             page: 当前页码（list 命令用）
             total_pages: 总页数（list 命令用）
             is_listall: 是否为 listall 命令（包含所有分页标记）
-            
-        Returns:
-            HTML 字符串
+            font_samples_dir: 字体示例图片目录
         """
         font_rows = []
         
         if is_listall:
             # listall: 在每页第一个字体前插入分页标记
             for idx, (font_name, font_path) in enumerate(page_fonts):
-                font_img_path = font_path.parent / f"{font_path.stem}.png"
+                # 字体图片在 font_samples_dir 下，而不是 font_path.parent
+                if font_samples_dir:
+                    font_img_path = font_samples_dir / f"{font_path.stem}.png"
+                else:
+                    font_img_path = font_path.parent / f"{font_path.stem}.png"
                 
                 if not font_img_path.exists():
                     continue
@@ -88,7 +91,11 @@ class HTMLBuilder:
             # list: 单页模式
             for idx, (font_name, font_path) in enumerate(page_fonts):
                 global_idx = start_idx + idx
-                font_img_path = font_path.parent / f"{font_path.stem}.png"
+                # 字体图片在 font_samples_dir 下，而不是 font_path.parent
+                if font_samples_dir:
+                    font_img_path = font_samples_dir / f"{font_path.stem}.png"
+                else:
+                    font_img_path = font_path.parent / f"{font_path.stem}.png"
                 
                 if not font_img_path.exists():
                     continue

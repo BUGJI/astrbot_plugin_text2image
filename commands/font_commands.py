@@ -25,6 +25,7 @@ class FontCommands:
     
     def __init__(self, plugin: "TextTool"):
         self.plugin = plugin
+        self.cache_path = plugin.cache_path
         self.cache_manager = CacheManager(plugin.cache_path, plugin.data_path)
     
     async def listall(self, event):
@@ -91,7 +92,8 @@ class FontCommands:
             fonts_per_page=fonts_per_page,
             total_fonts=total_fonts,
             default_font=self.plugin.default_font,
-            is_listall=True
+            is_listall=True,
+            font_samples_dir=font_samples_dir
         )
         
         # 计算缓存指纹
@@ -286,7 +288,8 @@ class FontCommands:
             default_font=self.plugin.default_font,
             page=page,
             total_pages=total_pages,
-            is_listall=False
+            is_listall=False,
+            font_samples_dir=font_samples_dir
         )
         
         # 计算缓存指纹

@@ -86,10 +86,8 @@ class TextTool(Star):
         if self.max_concurrent_renders <= 0:
             logger.warning("max_concurrent_renders <= 0，自动修正为 1")
             self.max_concurrent_renders = 1
-        self.max_concurrent_font_samples = int(self.config.limit.get("max_concurrent_font_samples", 8))
-        if self.max_concurrent_font_samples <= 0:
-            logger.warning("max_concurrent_font_samples <= 0，自动修正为 1")
-            self.max_concurrent_font_samples = 1
+        # 字体示例渲染并发数（使用 max_concurrent_renders 配置）
+        self.max_concurrent_font_samples = self.max_concurrent_renders
         self.fonts_per_page = int(self.config.limit.get("fonts_per_page", 20))
         self.font_list_columns = int(self.config.limit.get("font_list_columns", 3))
         # 校验 font_list_columns 范围
