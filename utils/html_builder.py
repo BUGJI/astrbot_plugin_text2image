@@ -144,7 +144,7 @@ class HTMLBuilder:
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         html, body {{ background: #FFFFFF; padding: 20px; }}
-        table {{ width: 100%; border-collapse: collapse; }}
+        table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
         td {{ background: #FFFFFF; }}
         .font-cell {{
             text-align: center;
@@ -153,6 +153,7 @@ class HTMLBuilder:
             border-right: 1px solid #ddd;
             border-bottom: 1px solid #ddd;
             width: {column_width}%;
+            overflow: hidden;
         }}
         .font-index {{
             font-family: sans-serif;
@@ -170,16 +171,21 @@ class HTMLBuilder:
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            max-width: 100%;
         }}
         .font-sample {{
             padding: 8px;
             text-align: center;
             vertical-align: middle;
+            width: 100%;
+            overflow: hidden;
         }}
         .font-sample img {{
             display: inline-block;
-            max-width: 100%;
+            width: 100%;
+            max-width: 180px;
             height: auto;
+            object-fit: contain;
         }}
         .page-break {{
             font-family: sans-serif;
