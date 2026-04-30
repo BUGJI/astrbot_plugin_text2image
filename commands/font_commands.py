@@ -329,7 +329,7 @@ class FontCommands:
         async def render():
             async with async_playwright() as p:
                 browser = await p.chromium.launch()
-                page_obj = await browser.new_page(viewport={"width": 1200, "height": 800})
+                page_obj = await browser.new_page(viewport={"width": 3200, "height": 1600})
                 html_path = self.cache_path / f"fontlist_{uid}_{ts}.html"
                 html_path.write_text(html_content, encoding="utf-8")
                 await page_obj.goto(f"file://{html_path.absolute()}")
