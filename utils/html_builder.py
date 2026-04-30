@@ -73,7 +73,7 @@ class HTMLBuilder:
                         <div class="font-index">{idx + 1}</div>
                         <div class="font-name">{font_name}{is_default}</div>
                     </div>
-                    <div class="font-sample"><img src="{rel_path}" height="60"></div>
+                    <div class="font-sample"><img src="{rel_path}"></div>
                 </td>""")
                 
                 # 每行结束
@@ -112,7 +112,7 @@ class HTMLBuilder:
                         <div class="font-index">{global_idx + 1}</div>
                         <div class="font-name">{font_name}{is_default}</div>
                     </div>
-                    <div class="font-sample"><img style="width:200px;" src="{rel_path}"></div>
+                    <div class="font-sample"><img src="{rel_path}"></div>
                 </td>""")
                 
                 # 每行结束
@@ -179,7 +179,7 @@ class HTMLBuilder:
             vertical-align: middle;
             width: 100%;
             overflow: hidden;
-            height: 120px;
+            height: 100px;
         }}
         .font-sample img {{
             display: inline-block;
