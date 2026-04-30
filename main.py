@@ -53,13 +53,14 @@ class TextTool(Star):
         self.name = "astrbot_plugin_text2image"
 
         self.plugin_root = Path(__file__).parent
-        self.fonts_dir = self.plugin_root / "fonts"
 
         # 兼容性兜底
         if self.config.compatibility.get("startool_path", False):
             self.data_path = StarTools.get_data_dir(self)
         else:
             self.data_path = Path(get_astrbot_data_path()) / "plugin_data" / self.name
+        
+        self.fonts_dir = self.data_path / "fonts"
         self.cache_path = self.data_path / "cache"
         
         # 兼容性配置
@@ -120,7 +121,7 @@ class TextTool(Star):
         self.fonts_dir.mkdir(exist_ok=True)
         self.cache_manager.ensure_dirs()
 
-        logger.info("Text2Image 插件已初始化")
+        logger.debug("Text2Image 插件已初始化")
 
     # =======================
     # 指令系统

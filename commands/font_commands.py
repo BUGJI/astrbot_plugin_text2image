@@ -5,6 +5,7 @@
 import asyncio
 import hashlib
 import shutil
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -54,7 +55,7 @@ class FontCommands:
         
         # 并发渲染缺失的字体示例图
         if render_tasks:
-            logger.debug(f"[DEBUG] 需要渲染 {len(render_tasks)} 个字体示例图")
+            logger.debug(f"需要渲染 {len(render_tasks)} 个字体示例图")
             yield event.plain_result(f"正在生成 {len(render_tasks)} 个字体示例图...")
             
             semaphore = asyncio.Semaphore(self.plugin.max_concurrent_font_samples)
@@ -62,7 +63,7 @@ class FontCommands:
             async def render_font_sample(task_font_name, task_font_path, task_font_img_path):
                 async with semaphore:
                     try:
-                        logger.debug(f"[DEBUG] 渲染字体示例：{task_font_name}")
+                        logger.debug(f"渲染字体示例：{task_font_name}")
                         await asyncio.get_event_loop().run_in_executor(
                             None,
                             lambda: render_text_sync(
@@ -101,7 +102,7 @@ class FontCommands:
         
         # 检查缓存
         if cached_img_path.exists():
-            logger.debug(f"[DEBUG] 使用缓存的字体列表图片：{cached_img_path}")
+            logger.debug(f"使用缓存的字体列表图片：{cached_img_path}")
             await self._send_menu_image(event, cached_img_path, self.plugin.listall_menu_image_send_mode)
             return
         
@@ -296,7 +297,7 @@ class FontCommands:
         
         # 检查缓存
         if cached_img_path.exists():
-            logger.debug(f"[DEBUG] 使用缓存的 list 第{page}页图片：{cached_img_path}")
+            logger.debug(f"使用缓存的 list 第{page}页图片：{cached_img_path}")
             await self._send_menu_image(event, cached_img_path, self.plugin.list_menu_image_send_mode)
             return
         

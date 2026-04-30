@@ -5,6 +5,7 @@
 import asyncio
 import hashlib
 import shutil
+import time
 import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Any, Dict, List
@@ -49,7 +50,7 @@ class GenerateCommand:
         if group_id:
             if str(group_id) in self.plugin.blacklist:
                 yield event.plain_result(self.plugin.blacklist_notice)
-                logger.info(f"群 {group_id} 在黑名单中，拒绝执行 generate")
+                logger.debug(f"群 {group_id} 在黑名单中，拒绝执行 generate")
                 return
         
         raw = event.message_str.strip()
